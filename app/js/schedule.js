@@ -42,6 +42,7 @@
     termSel.addEventListener('change', function () { state.term = termSel.value; state.classId = ''; again(); });
     body.appendChild(h('div', { class: 'toolbar' }, [h('label', { class: 'field inline' }, [h('span', { text: '期' }), terms.length ? termSel : h('span', { text: 'まだクラスがありません' })]),
       h('button', { class: 'btn primary', type: 'button', text: '＋ クラスを作る', on: { click: function () { editClass(null, again); } } }),
+      h('button', { class: 'btn primary', type: 'button', text: '＋ 開講日をまとめて作る', on: { click: function () { pickAndGenerate(again); } } }),
       h('button', { class: 'btn', type: 'button', text: '＋ 1回ずつ足す（振替Day・体験・個別・追加の授業）', on: { click: function () { addOne(again); } } })]));
 
     var classes = ref.classes.filter(function (c) { return c.term === state.term; });
@@ -165,6 +166,19 @@
         ui.write('session.generate', args, { button: b, title: '作る開講日（まだ保存していません）', okLabel: 'この日程で保存する',
           onDone: ui.closing(m, function (d) { ui.toast('開講日を ' + ((d.result && d.result.session_ids) || []).length + ' 回作りました', 'ok'); again(); }) });
       } });
+  }
+
+  /** どの授業（クラス）の開講日を作るかを選んでから、作る画面へ（尚哉 10/4）。いま開いているクラスがあれば最初から選んでおく */
+  function pickAndGenerate(again) {
+    var classes = ref.classes.filter(function (c) { return c.hidden !== '1' && c.term === state.term; });
+    if (!classes.length) { ui.toast('この期のクラスがありません。先に「クラスを作る」から作ってください', 'warn'); return; }
+    var byId = A.byId(classes);
+    ui.formModal({ title: '開講日をまとめて作る', okLabel: '次へ',
+      intro: 'どの授業の開講日を作るか選んでください',
+      fields: [{ key: 'classId', label: '授業（クラス）', type: 'select', value: byId[state.classId] ? state.classId : classes[0].id,
+        options: classes.map(function (c) { return { value: c.id, label: A.classLabel(c, co()) }; }) }],
+      check: function (v) { return byId[v.classId] ? { args: v } : { error: '授業を選んでください' }; },
+      onOk: function (v, b, m) { m.close(); state.classId = v.classId; generate(byId[v.classId], again); } });
   }
 
   /* ---------- 1回ずつ足す ---------- */
