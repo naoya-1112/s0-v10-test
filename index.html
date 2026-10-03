@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>S0検証 V-10</title>
+<style>
+body{font:16px sans-serif;padding:12px;max-width:720px;margin:auto}
+button{font-size:18px;padding:10px 14px;margin:6px 0}
+#st{font-size:20px;font-weight:bold;margin:8px 0}
+pre{white-space:pre-wrap;background:#f4f4f4;padding:8px;font-size:13px}
+table{border-collapse:collapse;width:100%}td,th{border:1px solid #333;padding:6px}
+@media print{.np{display:none}}
+</style>
+<script src="https://accounts.google.com/gsi/client" async></script>
+</head><body>
+<!-- 段階0 V-10 の試し用（架空データだけ）。画面はGoogleの外に置き、データは Apps Script のAPIで読み書きする -->
+<div class="np">
+<h2>S0検証 V-10（画面をGoogleの外に置く）</h2>
+<div id="st">確認中…</div>
+<div id="gbtn"></div>
+<div><button onclick="who()">ログイン状態を確かめる</button> <button onclick="logout()">ログアウト</button></div>
+<div><button onclick="seat10()">（試験）最後の1席に10件同時</button></div>
+<div><button onclick="document.getElementById('pr').hidden=false;window.print()">（試験）当日名簿を印刷する</button></div>
+<pre id="log"></pre>
+</div>
+<div id="pr" hidden>
+<h3>当日名簿（試し）2026-11-05 10:00 検証コース</h3>
+<table><tr><th>No</th><th>氏名</th><th>ふりがな</th><th>出欠</th><th>メモ</th></tr><tbody id="rows"></tbody></table>
+</div>
+<script>
+var API='https://script.google.com/macros/s/AKfycbzMHgHKrZjfaxFGRbnRBdtDjJw_ZqeDiJDs5j1PUge-iltv_wXUEg3clYGkZpa70VRA/exec', GCID='920093308638-lpmr5iplmbh82v9hol40ua6n6m6ahbef.apps.googleusercontent.com';
+function L(s){var e=document.getElementById('log');e.textContent=new Date().toLocaleTimeString()+' '+s+'\n'+e.textContent;}
+function st(s){document.getElementById('st').textContent=s;}
+function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v);}catch(e){L('保存場所が使えない: '+e);}}
+function api(b){
+  return fetch(API,{method:'POST',body:JSON.stringify(Object.assign({v10:1},b)),headers:{'Content-Type':'text/plain;charset=utf-8'},credentials:'omit',redirect:'follow'})
+    .then(function(r){return r.text();}).then(function(t){try{return JSON.parse(t);}catch(e){return {error:'not_json',head:t.slice(0,80)};}});
+}
+function who(){var sk=ls('sk');if(!sk){st('未ログイン');return;}
+  api({fn:'whoami',sk:sk}).then(function(r){L('whoami '+JSON.stringify(r));st(r.relogin?'ログインが切れました。もう一度ログインしてください':'ログイン中: '+r.email+'（'+r.role+'）');}).catch(function(e){L('whoami 失敗: '+e);});}
+function onCred(c){
+  L('Googleから札を受け取った');
+  api({fn:'login',idToken:c.credential}).then(function(r){L('login '+JSON.stringify(r));
+    if(r.sk){ls('sk',r.sk);who();}
+    else st(r.error==='not_registered'?'このアカウントは登録されていません（'+r.email+'）':'ログインできません: '+r.error);
+  }).catch(function(e){L('login 失敗: '+e);st('ログインできません（通信）');});
+}
+function logout(){var sk=ls('sk');api({fn:'logout',sk:sk}).then(function(){ls('sk',null);st('ログアウトしました');L('logout');try{google.accounts.id.disableAutoSelect();}catch(e){}});}
+function seat10(){var res=[],n=0;for(var i=0;i<10;i++){api({fn:'seat',id:'V10_'+Date.now()+'_'+i}).then(function(r){res.push(r.r||r.error);},function(e){res.push('通信失敗');}).then(function(){if(++n===10)L('10件の結果: '+res.join(','));});}}
+(function(){var h='';for(var i=1;i<=15;i++)h+='<tr><td>'+i+'</td><td>架空 生徒'+i+'</td><td>かくう せいと'+i+'</td><td></td><td></td></tr>';document.getElementById('rows').innerHTML=h;})();
+window.addEventListener('afterprint',function(){document.getElementById('pr').hidden=true;});
+window.onload=function(){
+  L('端末: '+navigator.userAgent);
+  try{google.accounts.id.initialize({client_id:GCID,callback:onCred,ux_mode:'popup'});
+      google.accounts.id.renderButton(document.getElementById('gbtn'),{type:'standard',text:'signin_with',size:'large',locale:'ja'});}
+  catch(e){L('Googleでログインのボタンが出せない: '+e);}
+  who();
+};
+</script>
+</body></html>
