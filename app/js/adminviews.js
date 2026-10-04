@@ -8,11 +8,14 @@
 
   var MAKEUP_TYPE = { none: '振替なし', mutual: '相互振替（他の曜日の授業へ）', makeupday: '振替Day' };
   var KIND = { lesson: '授業', makeupday: '振替Day', trial: '体験', individual: '個別' };
-  var ROLE = { staff: 'スタッフ（全部の画面）', teacher: '講師（今日のクラス・当日名簿だけ）', recorder_only: '記録者の名前だけ（ログインしない）' };
+  var ROLE = { staff: 'スタッフ（全部の画面）', teacher: '講師（今日のクラス・当日名簿だけ）', recorder_only: '記録者の名前だけ（使われていません）' };
+  // 新しく選べる役割（recorder_only は記録者の選択をなくしたので出さない・尚哉 10/4）
+  var ROLE_PICK = ['staff', 'teacher'];
   var CAL = { ok: '反映済み', pending: '反映待ち', failed: '反映できなかった', skipped: 'カレンダー未設定' };
   var LINK_KIND = { enroll: '入会', move: '移動', pause: '休止', resume: '復帰', 'continue': '継続', rollover: '一括移行' };
   var CONT = { 'continue': '継続', move: '移動', end: '終了', pause: '休止', withdrawn: '退会' };
-  var CONTACT_REASON = { canceled: '中止のお知らせ', uncanceled: '中止の取りやめ', date_changed: '日程の変更', withdraw: '退会', pause: '休止' };
+  var CONTACT_REASON = { canceled: '中止のお知らせ', uncanceled: '中止の取りやめ', date_changed: '日程の変更', renumbered: '回番号の変更',
+    withdraw: '退会', withdrawn: '退会', pause: '休止', paused: '休止', class_ended: '1クラス終了', moved: '移動' };
   var WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
 
   function s(v) { return v === null || v === undefined ? '' : String(v).trim(); }
@@ -55,7 +58,7 @@
   function accountRows(accounts) {
     return (accounts || []).map(function (a) {
       var notes = [];
-      if (a.shared) notes.push('共用（記録者を選ぶ）');
+      if (a.shared) notes.push('共用（教室の iPad など）');
       if (!a.active) notes.push('無効');
       if (a.role !== 'recorder_only') notes.push(a.bound ? 'Googleアカウントと結び付け済み' : 'まだ一度もログインしていない');
       return { id: a.id, name: a.display_name, email: a.email || '（メールなし）', role: ROLE[a.role] || a.role, active: !!a.active,
@@ -136,9 +139,11 @@
     var o = { classId: s(f.classId), kind: f.kind || 'lesson', startDate: s(f.startDate) };
     if (!isDate(o.startDate)) return { error: '最初の日を選んでください' };
     var wd = f.weekday === '' || f.weekday === undefined ? (cls ? WEEKDAYS.indexOf(cls.weekday) : -1) : +f.weekday;
-    var dates = function (t) { return String(t || '').split(/[\s,、]+/).map(s).filter(Boolean); };
+    // 日付は選択欄で足した配列（U-14）。前の形（1行に1つの文字）も読む
+    var dates = function (t) { return Array.isArray(t) ? t.map(s).filter(Boolean) : String(t || '').split(/[\s,、]+/).map(s).filter(Boolean); };
     if (f.how === 'manual') {
-      var ds = dates(f.datesText);
+      if (Array.isArray(f.dates) && !f.dates.length) return { error: '日付を1つ以上「追加」してください' };
+      var ds = dates(f.dates !== undefined ? f.dates : f.datesText);
       var bad = ds.filter(function (d) { return !isDate(d); });
       if (!ds.length || bad.length) return { error: '日付を 2026-11-03 の形で1行に1つずつ入れてください' + (bad.length ? '（読めない: ' + bad.join('、') + '）' : '') };
       o.pattern = { type: 'manual', dates: ds };
@@ -159,7 +164,7 @@
       if (!/^[1-9]\d{0,2}$/.test(s(f.count))) return { error: '回数を数で入れてください' };
       o.count = +s(f.count);
     }   // どちらも無ければクラスの終わりの月まで
-    var skips = dates(f.skipText);
+    var skips = dates(f.skips !== undefined ? f.skips : f.skipText);
     if (skips.some(function (d) { return !isDate(d); })) return { error: '休みの日は 2026-12-29 の形で入れてください' };
     if (skips.length) o.skipDates = skips;
     if (s(f.startNumber)) o.startNumber = +s(f.startNumber);
@@ -206,7 +211,7 @@
       return { id: x.id, date: core.fmtDate(x.date), time: (x.start_time || '') + '〜' + (x.end_time || ''), name: name,
         status: canceled ? '中止' : '', moved: x.original_date ? '（もとは ' + core.fmtDate(x.original_date) + '）' : '',
         cal: CAL[x.cal_state] || '', calBad: x.cal_state === 'failed',
-        actions: canceled ? ['uncancel'] : ['change', 'cancel'].concat(x.kind === 'lesson' ? ['renumber'] : []),
+        actions: past ? [] : canceled ? ['uncancel'] : ['change', 'cancel'].concat(x.kind === 'lesson' ? ['renumber'] : []),   // 終わった回は操作を出さない（U-12）
         past: past, raw: x };
     });
   }
@@ -214,7 +219,7 @@
   /** 確認画面の文の中の生徒の番号（S_…）を名前に置き換える */
   function withNames(lines, names) {
     return (lines || []).map(function (l) {
-      return String(l).replace(/S_[0-9A-Za-z_-]+/g, function (id) { return names && names[id] ? names[id] : id; });
+      return core.humanize(l, { students: names || {} });   // 生徒以外の記号・英語の状態・日付も日本語に（直し第3弾）
     });
   }
 
@@ -223,29 +228,32 @@
    * {intro, groups:[{key:'absenceIds', title, items:[{id, label}]}], rest}（rest は選択肢でない文）
    */
   function uncancelChoices(d, names) {
-    var lines = withNames(d && d.confirm, names), c = (d && d.candidates) || {};
+    var raw = ((d && d.confirm) || []).map(String), lines = withNames(raw, names), c = (d && d.candidates) || {};
+    var cl = (d && d.candidate_labels) || null;   // サーバーが名前にした選択肢の文（確認の文から記号を外したので、番号で探せないとき用・直し第3弾）
     var used = {};
     var group = function (key, title, ids) {
       return { key: key, title: title, items: (ids || []).map(function (id) {
         var i = -1;
-        lines.forEach(function (l, j) { if (i < 0 && l.indexOf(id) >= 0 && /^［/.test(l)) i = j; });
+        raw.forEach(function (l, j) { if (i < 0 && l.indexOf(id) >= 0 && /^［/.test(l)) i = j; });
         if (i >= 0) used[i] = 1;
-        var text = i >= 0 ? lines[i].replace(/^［[^］]*］\s*/, '') : id;
+        var text = cl && cl[id] ? cl[id] : i >= 0 ? lines[i].replace(/^［[^］]*］\s*/, '') : id;
         return { id: id, label: text };
       }) };
     };
     var groups = [group('absenceIds', '中止の前に出ていた欠席連絡（戻すと「欠席」の連絡に戻ります）', c.absences),
       group('makeupIds', '取り消した振替（戻すと振替の予約に戻ります。空席を確かめます）', c.makeups),
       group('ticketIds', '失効させた振替券（戻すと使える券に戻ります）', c.tickets)].filter(function (g) { return g.items.length; });
-    var rest = lines.filter(function (l, j) { return j > 0 && !used[j]; });
+    var rest = lines.filter(function (l, j) { return j > 0 && !used[j] && !(cl && /^［/.test(l)); });
     return { intro: lines[0] || '', groups: groups, rest: rest, askPerson: !!(d && d.confirmWithPerson) };
   }
 
-  function contactRows(contacts, sessions) {
-    var sm = byId(sessions);
+  function contactRows(contacts, sessions, students, classes) {
+    var sm = byId(sessions), stm = byId(students), maps = core.nameMaps(students, classes, sessions);
     return (contacts || []).map(function (c) {
       var x = sm[c.session_id];
-      return { id: c.id, name: c.student_name || c.student_id, what: CONTACT_REASON[c.reason] || c.reason, message: c.message || '',
+      var p = stm[c.student_id] || {};
+      return { id: c.id, name: c.student_name || c.student_id, what: CONTACT_REASON[c.reason] || c.reason, message: core.humanize(c.message || '', maps),
+        reach: [p.phone ? '電話 ' + p.phone : '', p.line_name ? 'LINE ' + p.line_name : ''].filter(Boolean).join('・'),
         session: x ? core.fmtDate(x.date) + ' ' + (x.start_time || '') : '', at: core.fmtDateTime(c.created_at), done: c.contacted === '1',
         doneText: c.contacted === '1' ? '連絡済み（' + core.fmtDateTime(c.contacted_at) + (c.contacted_by ? '・' + c.contacted_by : '') + '）' : '' };
     });
@@ -256,20 +264,64 @@
   var STUDENT_FIELDS = [
     { key: 'name', label: '名前', required: true }, { key: 'kana', label: 'ふりがな', required: true },
     { key: 'phone', label: '電話' }, { key: 'email', label: 'メール' }, { key: 'line_name', label: 'LINEの名前' },
-    { key: 'joined', label: '入会日', type: 'date' }, { key: 'id_checked', label: '本人確認' }, { key: 'consent_date', label: '同意した日' },
-    { key: 'kaihipay_registered', label: '会費ペイの登録' }, { key: 'source', label: 'きっかけ' }, { key: 'memo', label: 'メモ', type: 'textarea' }];
+    { key: 'joined', label: '入会日', type: 'date' }, { key: 'id_checked', label: '本人確認', type: 'checkbox', mark: '確認済み' },
+    { key: 'consent_date', label: '同意した日', type: 'date' },
+    { key: 'kaihipay_registered', label: '会費ペイの登録', type: 'checkbox', mark: '登録済み' }, { key: 'source', label: 'きっかけ', type: 'select' },
+    { key: 'memo', label: 'メモ', type: 'textarea' }];
+  /** きっかけの選択肢（サーバー LogicAdmin.js ADM_STUDENT_SOURCES と同じ・10/4 仮置き【要確認】） */
+  var STUDENT_SOURCES = ['紹介', 'Instagram', '検索', '体験レッスン', 'その他'];
+
+  /** 入力欄の値をサーバーに送る文字にする（印は 1 か空）。前の値が形に合わない（移行前の文字）とき、空のままなら変えない */
+  function studentValue(x, f, cur) {
+    var v = x.type === 'checkbox' ? (f[x.key] === true || f[x.key] === '1' ? '1' : '') : s(f[x.key]);
+    var old = s(cur && cur[x.key]);
+    if (cur && x.type === 'checkbox' && old !== '1' && v === '') return old;
+    if (cur && x.type === 'date' && old && !isDate(old) && v === '') return old;
+    return v;
+  }
+  /** 生徒の登録・編集の入力欄（印はチェック・日付・きっかけは選ぶ形。前の値が選択肢に無ければ「（前の入力）」で残す） */
+  function studentFormFields(cur) {
+    return STUDENT_FIELDS.map(function (f) {
+      var v = cur ? cur[f.key] : '', o = { key: f.key, label: f.label + (f.required ? '（必ず）' : ''), type: f.type, value: v };
+      if (f.type === 'checkbox') { o.label = f.label + ': ' + f.mark; o.value = s(v) === '1'; }
+      if (f.type === 'date' && v && !isDate(v)) { o.value = ''; o.hint = '前の入力: ' + v + '（日付を選ぶと置き換わります）'; }
+      if (f.key === 'source') {
+        o.options = [{ value: '', label: '選んでください（空のまま可）' }].concat(STUDENT_SOURCES.map(function (x) { return { value: x, label: x }; }));
+        if (s(v) && STUDENT_SOURCES.indexOf(s(v)) < 0) o.options.push({ value: s(v), label: '（前の入力）' + s(v) });
+      }
+      return o;
+    });
+  }
+  /** 生徒一覧の「今のクラス」列の文字（student.list の current → クラス名。休止中・予定は印） */
+  function currentClassText(current, classes, courses) {
+    var cm = byId(classes), co = byId(courses);
+    if (!current || !current.length) return '今月の在籍なし';
+    return current.map(function (x) {
+      var c = cm[x.class_id], name = c ? ((c.label || '') + ' ' + (c.start_time || '') + (co[c.course_id] ? '（' + co[c.course_id].name + '）' : '')).trim() : x.class_id;
+      return name + (x.state === 'paused' ? '［休止中］' : '') + (x.planned ? '［予定］' : '');
+    }).join('、');
+  }
+  /** 詳細に出す文字（印は「確認済み」など・日付は月日） */
+  function studentFieldText(f, v, fmtDate) {
+    v = s(v);
+    if (f.type === 'checkbox') return v === '1' ? f.mark : v;
+    if (f.type === 'date' && isDate(v) && fmtDate) return fmtDate(v);
+    return v;
+  }
 
   /** 生徒の保存の args（新規は全部・編集は変わった所だけ） */
   function studentArgs(cur, f) {
     var o = {};
     STUDENT_FIELDS.forEach(function (x) {
-      var v = s(f[x.key]);
+      var v = studentValue(x, f, cur);
       if (cur ? v !== s(cur[x.key]) : v !== '') o[x.key] = v;
     });
     var name = o.name !== undefined ? o.name : s(cur && cur.name), kana = o.kana !== undefined ? o.kana : s(cur && cur.kana);
     if (!name || !kana) return { error: '名前とふりがなを入れてください' };
     if (o.joined === '' && cur) return { error: '入会日は消せません（日付を入れてください）' };
     if (o.joined && !isDate(o.joined)) return { error: '入会日を選んでください' };
+    if (o.consent_date && !isDate(o.consent_date)) return { error: '同意した日を選んでください' };
+    if (o.source && STUDENT_SOURCES.indexOf(o.source) < 0) return { error: 'きっかけを選んでください' };
     if (cur) { if (!Object.keys(o).length) return { error: '変わった所がありません' }; o.id = cur.id; }
     return { args: o };
   }
@@ -291,7 +343,7 @@
   /**
    * 在籍の時系列（過去〜予定）。enrollments は student.get の在籍（from_month 順）。
    * 1行 → {id, cls, period, state, kind, badges, actions:[move|pause|end|resume|confirm|correct]}
-   * 押せる操作: 取り消した行は無し／予定の行は「確定」「訂正」／休止中（終わり未定）は「復帰」／在籍中で今月以降も続く行は「移動・休止・1クラス終了」
+   * 押せる操作: 取り消した行は無し／予定の行は「確定」「予定を取り消す」「訂正」／休止中（終わり未定・復帰の予定なし）は「復帰」／在籍中で今月以降も続く行は「移動・休止・1クラス終了」
    */
   function enrollmentTimeline(enrollments, classes, courses, today) {
     var cm = byId(classes), co = byId(courses), m = String(today).slice(0, 7);
@@ -307,8 +359,8 @@
       if (e.cont_decided) badges.push('継続確認: ' + (CONT[e.cont_decided] || e.cont_decided));
       var actions = [];
       if (!voided) {
-        if (planned) actions.push('confirm');
-        else if (paused && !e.to_month) actions.push('resume');
+        if (planned) actions.push('confirm', 'cancel_plan');
+        else if (paused && !e.to_month && !hasNext[e.id]) actions.push('resume');
         else if (!paused && !ended && !hasNext[e.id]) actions.push('move', 'pause', 'end');
         actions.push('correct');
       }
@@ -342,7 +394,7 @@
 
   function withdrawalRows(ws) {
     return (ws || []).map(function (w) {
-      return { id: w.id, text: core.fmtMonth(w.apply_month) + 'から退会' + (w.received_on ? '（受けた日 ' + core.fmtDate(w.received_on) + '）' : '') +
+      return { id: w.id, text: core.fmtMonth(core.addMonths(w.apply_month, -1)) + 'まで来て退会' + (w.received_on ? '（受けた日 ' + core.fmtDate(w.received_on) + '）' : '') +
         (w.reason ? '・理由: ' + w.reason : ''), active: w.status === 'active',
         state: w.status === 'active' ? '' : '取り消し済み' + (w.void_reason ? '（' + w.void_reason + '）' : '') };
     });
@@ -355,7 +407,13 @@
     return base.replace(/#.*$/, '') + '#t=' + token;
   }
 
-  var A = { linkUrl: linkUrl, MAKEUP_TYPE: MAKEUP_TYPE, KIND: KIND, ROLE: ROLE, WEEKDAYS: WEEKDAYS, STUDENT_FIELDS: STUDENT_FIELDS, monthOptions: monthOptions, byId: byId,
+  /** アカウントの役割の選択肢。recorder_only は今その役割の行を直すときだけ出す（尚哉 10/4） */
+  function roleOptions(curRole) {
+    var keys = ROLE_PICK.concat(curRole === 'recorder_only' ? ['recorder_only'] : []);
+    return keys.map(function (k) { return { value: k, label: ROLE[k] }; });
+  }
+
+  var A = { linkUrl: linkUrl, MAKEUP_TYPE: MAKEUP_TYPE, KIND: KIND, ROLE: ROLE, roleOptions: roleOptions, WEEKDAYS: WEEKDAYS, STUDENT_FIELDS: STUDENT_FIELDS, STUDENT_SOURCES: STUDENT_SOURCES, studentFormFields: studentFormFields, studentFieldText: studentFieldText, currentClassText: currentClassText, monthOptions: monthOptions, byId: byId,
     classLabel: classLabel, terms: terms, inOpen: inOpen, accountRows: accountRows, accountArgs: accountArgs, settingsArgs: settingsArgs,
     calendarFailureRows: calendarFailureRows, calendarNote: calendarNote, courseArgs: courseArgs, classArgs: classArgs, generateArgs: generateArgs,
     addArgs: addArgs, changeArgs: changeArgs, sessionRows: sessionRows, withNames: withNames, uncancelChoices: uncancelChoices,

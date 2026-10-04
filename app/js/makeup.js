@@ -8,6 +8,7 @@
   'use strict';
   var App = root.App, core = App.core, O = App.ops, h = App.ui.h, ui = App.ui;
   var state = { all: false, studentId: '' };
+  App.ui.onForget(function () { state.all = false; state.studentId = ''; });   // ログアウト・人の切り替え（04a 小12）
   var ref = { sessions: [], classes: [] };
 
   function loadRef() {
@@ -17,10 +18,10 @@
     });
   }
 
-  function render(view) {
+  function render(view0) {
     var f = App.takeFocus ? App.takeFocus() : '';
     if (f) state.studentId = f;
-    ui.clear(view);
+    var view = ui.stage(view0);   // 出し直しの間も今の画面を出したまま（尚哉 10/4①）
     view.appendChild(h('h1', { text: '振替・欠席' }));
     var people = h('div', {});
     var list = h('div', { class: 'loading', text: '読み込み中…' });
@@ -28,13 +29,14 @@
     view.appendChild(people);
     var all = h('input', { type: 'checkbox', class: 'check' });
     all.checked = state.all;
-    all.addEventListener('change', function () { state.all = all.checked; render(view); });
+    all.addEventListener('change', function () { state.all = all.checked; render(view0); });
     view.appendChild(h('h2', { class: 'section-title', text: state.all ? '振替の一覧（取り消したもの・過去も）' : 'これからの振替' }));
     view.appendChild(h('div', { class: 'toolbar np' }, [h('label', { class: 'choice' }, [all, ' 取り消したもの・過去も見る']), ui.printButton()]));
     view.appendChild(list);
-    loadRef().then(function () {
-      studentBox(view, people);
-      return ui.read('makeup.list', { all: state.all });
+    // 共通の一覧と振替の一覧を並べて1回で読む（U-21）
+    Promise.all([loadRef(), ui.read('makeup.list', { all: state.all })]).then(function (rr) {
+      studentBox(view0, people);
+      return rr[1];
     }).then(function (d) {
       ui.clear(list); list.className = 'print-area';
       if (!d) { list.textContent = '読み込めませんでした'; return; }
@@ -42,12 +44,13 @@
       list.appendChild(h('p', { class: 'sub', text: rows.length + ' 件' }));
       if (!rows.length) { list.appendChild(h('p', { class: 'empty', text: 'これからの振替はありません' })); return; }
       list.appendChild(h('div', { class: 'scroll-x' }, h('table', { class: 'grid' }, [
-        h('thead', {}, h('tr', {}, ['誰が', '種類', '行く回', '印', ''].map(function (t) { return h('th', { class: t ? '' : 'np', text: t }); }))),
+        h('thead', {}, h('tr', {}, ['誰が', '', '種類', '行く回', '印'].map(function (t) { return h('th', { class: t ? '' : 'np', text: t }); }))),
         h('tbody', {}, rows.map(function (r) {
           var b = r.canceled ? null : h('button', { class: 'btn small', type: 'button', text: r.mode === 'after' ? '取り消す（開始後）' : '取り消す',
-            on: { click: function () { cancel(r, function () { render(view); }); } } });
-          return h('tr', { class: r.canceled ? 'planned' : '' }, [h('td', { class: 'name', text: r.name }), h('td', { text: r.kind }), h('td', { text: r.to }),
-            h('td', { class: 'memo', text: r.badges.concat(r.canceledText ? [r.canceledText] : []).join('・') }), h('td', { class: 'np' }, b)]);
+            on: { click: function () { cancel(r, function () { render(view0); }); } } });
+          // 操作は名前のすぐ横（U-13）
+          return h('tr', { class: r.canceled ? 'planned' : '' }, [h('td', { class: 'name', text: r.name }), h('td', { class: 'np act-first' }, b), h('td', { text: r.kind }), h('td', { text: r.to }),
+            h('td', { class: 'memo', text: r.badges.concat(r.canceledText ? [r.canceledText] : []).join('・') })]);
         }))])));
     });
   }
@@ -68,17 +71,15 @@
 
   function studentBox(view, box) {
     ui.clear(box);
-    var sel = h('select', { class: 'input', 'aria-label': '生徒' }, [h('option', { value: '', text: '生徒を選んでください' })]);
     var out = h('div', {});
-    box.appendChild(h('div', { class: 'toolbar np' }, [h('label', { class: 'field inline' }, [h('span', { text: '生徒' }), sel])]));
+    // 生徒は名前・ふりがなで探して選ぶ（生徒の画面と同じ探し方・U-22）
+    var pick = ui.studentPicker({ value: state.studentId, onChange: function (id) { state.studentId = id; person(view, out); } });
+    box.appendChild(h('div', { class: 'toolbar np' }, [pick.el]));
     box.appendChild(out);
-    sel.addEventListener('change', function () { state.studentId = sel.value; person(view, out); });
     ui.read('student.list', {}).then(function (d) {
       if (!d) return;
-      d.students.slice().sort(function (a, b) { return (a.kana || '') < (b.kana || '') ? -1 : 1; }).forEach(function (s) {
-        sel.appendChild(h('option', { value: s.id, text: s.name + (s.kana ? '（' + s.kana + '）' : '') }));
-      });
-      if (state.studentId) { sel.value = state.studentId; person(view, out); }
+      pick.setStudents(d.students);
+      if (state.studentId) person(view, out);
     });
   }
 
@@ -110,7 +111,7 @@
   function absenceAdd(st, own, again) {
     if (!own.length) { ui.toast('この生徒が在籍しているクラスの授業回がありません（クラスと日程を確かめてください）', 'error'); return; }
     ui.formModal({ title: '欠席連絡を代行で登録', okLabel: '登録する', intro: st.name + ' さんの欠席を、教室が代わりに登録します。始まった後の回は次の画面で確かめてから登録します',
-      fields: [{ key: 'sessionId', label: '休む回', type: 'select', options: O.sesOptions(own, ref.classes, '回を選んでください') },
+      fields: [(function () { var ao = O.absenceOptions(own, ref.classes, core.todayJst()); return { key: 'sessionId', label: '休む回（今日からの回が先・既定は次の回）', type: 'select', options: ao.options, value: ao.def }; })(),
         { key: 'byName', label: '連絡を受けた人（空なら自分）', type: 'text' }],
       check: function (v) { return v.sessionId ? { args: { studentId: st.id, sessionId: v.sessionId, byName: v.byName.trim() || undefined } } : { error: '休む回を選んでください' }; },
       onOk: function (args, okBtn, m) { ui.write('absence.add', args, { button: okBtn, title: '締切後の登録の確認', okLabel: '登録する', onDone: ui.closing(m, again) }); } });

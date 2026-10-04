@@ -5,23 +5,22 @@
   'use strict';
   var App = root.App, core = App.core, h = App.ui.h;
   var state = { studentId: '' };
+  App.ui.onForget(function () { state.studentId = ''; });   // ログアウト・人の切り替え（04a 小12）
 
   function render(view) {
     var f = App.takeFocus ? App.takeFocus() : '';
     if (f) state.studentId = f;
     App.ui.clear(view);
     view.appendChild(h('h1', { text: 'カルテ' }));
-    var sel = h('select', { class: 'input', 'aria-label': '生徒' }, [h('option', { value: '', text: '生徒を選んでください' })]);
     var list = h('div', {});
-    view.appendChild(h('div', { class: 'toolbar np' }, [h('label', { class: 'field inline' }, [h('span', { text: '生徒' }), sel])]));
+    // 生徒は名前・ふりがなで探して選ぶ（生徒の画面と同じ探し方・U-22）
+    var pick = App.ui.studentPicker({ value: state.studentId, onChange: function (id) { state.studentId = id; load(view, list); } });
+    view.appendChild(h('div', { class: 'toolbar np' }, [pick.el]));
     view.appendChild(list);
-    sel.addEventListener('change', function () { state.studentId = sel.value; load(view, list); });
     App.ui.read('student.list', {}).then(function (d) {
       if (!d) return;
-      d.students.slice().sort(function (a, b) { return (a.kana || '') < (b.kana || '') ? -1 : 1; }).forEach(function (s) {
-        sel.appendChild(h('option', { value: s.id, text: s.name + (s.kana ? '（' + s.kana + '）' : '') }));
-      });
-      if (state.studentId) { sel.value = state.studentId; load(view, list); }
+      pick.setStudents(d.students);
+      if (state.studentId) load(view, list);
     });
   }
 
@@ -53,12 +52,12 @@
 
   function write(view) {
     var text = h('textarea', { class: 'reason', rows: 4 });
-    var tag = h('input', { type: 'text', class: 'input', placeholder: 'タグ（任意）' });
+    var tag = h('select', { class: 'input', 'aria-label': 'タグ' }, [h('option', { value: '', text: 'タグなし' })].concat(App.core.NOTE_TAGS.map(function (t) { return h('option', { value: t, text: t }); })));
     var m = App.ui.openModal({ title: 'カルテを書く', okLabel: '保存する',
-      body: h('div', {}, [h('label', { class: 'field' }, [h('span', { text: 'カルテ' }), text]), h('label', { class: 'field' }, [h('span', { text: 'タグ' }), tag])]),
+      body: h('div', {}, [h('label', { class: 'field' }, [h('span', { text: 'カルテ' }), text]), h('label', { class: 'field' }, [h('span', { text: 'タグ（任意・健康や家庭の話は「配慮」）' }), tag])]),
       onOk: function (_, okBtn) {
         if (!text.value.trim()) { App.ui.toast('カルテの本文を入れてください', 'error'); return; }
-        App.ui.write('note.add', { studentId: state.studentId, body: text.value.trim(), tag: tag.value.trim() },
+        App.ui.write('note.add', { studentId: state.studentId, body: text.value.trim(), tag: tag.value },
           { button: okBtn, onDone: function () { m.close(); render(view); } });
       } });
   }

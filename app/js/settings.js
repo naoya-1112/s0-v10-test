@@ -6,10 +6,10 @@
   'use strict';
   var App = root.App, A = App.admin, h = App.ui.h, ui = App.ui;
 
-  function render(view) {
-    ui.clear(view);
+  function render(view0) {
+    var view = ui.stage(view0);   // 出し直しの間も今の画面を出したまま（尚哉 10/4①）
     view.appendChild(h('h1', { text: '設定' }));
-    var again = function () { render(view); };
+    var again = function () { render(view0); };
     var secS = h('div', { class: 'loading', text: '読み込み中…' }), secA = h('div', {}), secC = h('div', {});
     view.appendChild(h('h2', { class: 'section-title', text: '教室の設定' }));
     view.appendChild(secS);
@@ -17,9 +17,12 @@
     view.appendChild(secA);
     view.appendChild(h('h2', { class: 'section-title', text: 'カレンダーへの反映' }));
     view.appendChild(secC);
-    view.appendChild(h('h2', { class: 'section-title', text: '版を戻した後の「削除の再確認」' }));
-    view.appendChild(h('p', { class: 'sub', text: 'スプレッドシートの版を戻した後に1回だけ押します。完全削除した生徒が戻っていれば消し直し、発行し直したリンクが戻っていれば「再発行が要る」に出します。ふだんは押さなくて大丈夫です' }));
-    view.appendChild(h('div', { class: 'toolbar' }, [h('button', { class: 'btn', type: 'button', text: '削除の再確認をする', on: { click: function () {
+    // ふだんは使わないので「困ったとき（管理者向け）」の折りたたみの中に入れる（U-30）
+    var fold = h('div', {});
+    view.appendChild(h('details', { class: 'admin-fold np' }, [h('summary', { text: '困ったとき（管理者向け） ▾' }), fold]));
+    fold.appendChild(h('h2', { class: 'section-title', text: '版を戻した後の「削除の再確認」' }));
+    fold.appendChild(h('p', { class: 'sub', text: 'スプレッドシートの版を戻した後に1回だけ押します。完全削除した生徒が戻っていれば消し直し、発行し直したリンクが戻っていれば「再発行が要る」に出します。ふだんは押さなくて大丈夫です' }));
+    fold.appendChild(h('div', { class: 'toolbar' }, [h('button', { class: 'btn', type: 'button', text: '削除の再確認をする', on: { click: function () {
       ui.confirmThen('削除の再確認をしますか', ['版を戻した後に使う操作です', '完全削除した人の記録が戻っていれば、もう一度消します'], '再確認する', function (b, m) {
         ui.write('restore.recheck', {}, { button: b, onDone: ui.closing(m, function (d) {
           var r = d.result || {};
@@ -42,7 +45,7 @@
             { key: 'calendar_id', label: 'カレンダーID', value: cur.calendar_id, hint: 'Googleカレンダーの「設定」→「カレンダーの統合」にある「カレンダーID」をそのまま貼ります' },
             { key: 'default_capacity', label: '定員の初期値', type: 'number', value: cur.default_capacity },
             { key: 'policy_json', label: '詳しい決まり（policy_json）', type: 'textarea', rows: 4, value: cur.policy_json,
-              hint: '振替・券の期限などの決まりです。分からないときは触らないでください（間違えると保存しません）' }],
+              hint: '振替・券の期限などの決まりです。分からないときは触らないでください（決められた値以外は保存せず、どこが違うかを表示します）' }],
           check: function (v) { return A.settingsArgs(cur, v); },
           onOk: function (args, b, m) { ui.write('settings.save', args, { button: b, onDone: ui.closing(m, again) }); } });
       } } })]));
@@ -60,8 +63,9 @@
             h('button', { class: 'btn small', type: 'button', text: '直す', on: { click: function () { editAccount(raw, again); } } }),
             r.canClearSub ? h('button', { class: 'btn small', type: 'button', text: 'Googleの結び付けを外す', on: { click: function () { clearSub(raw, again); } } }) : null,
             r.active ? h('button', { class: 'btn small danger', type: 'button', text: '無効にする', on: { click: function () { disable(raw, again); } } })
-              : h('button', { class: 'btn small', type: 'button', text: '有効に戻す', on: { click: function () {
-                ui.write('account.save', { id: raw.id, display_name: raw.display_name, role: raw.role, email: raw.email, shared: raw.shared, active: true }, { onDone: again });
+              : h('button', { class: 'btn small', type: 'button', text: '有効に戻す', on: { click: function (ev) {
+                // 送信中は押せない（2回押しで受付が2つにならない・04a 小10）
+                ui.write('account.save', { id: raw.id, display_name: raw.display_name, role: raw.role, email: raw.email, shared: raw.shared, active: true }, { button: ev.currentTarget, onDone: again });
               } } })])]));
       });
     });
@@ -87,12 +91,12 @@
 
   function editAccount(cur, again) {
     ui.formModal({ title: cur ? 'アカウントを直す' : 'アカウントを足す', okLabel: '保存する',
-      fields: [{ key: 'display_name', label: '表示名（記録者として出る名前）', value: cur ? cur.display_name : '' },
+      fields: [{ key: 'display_name', label: '表示名（出欠・カルテの記録者として残る名前）', value: cur ? cur.display_name : '' },
         { key: 'role', label: '役割', type: 'radio', value: cur ? cur.role : 'teacher',
-          options: Object.keys(A.ROLE).map(function (k) { return { value: k, label: A.ROLE[k] }; }) },
+          options: A.roleOptions(cur && cur.role) },
         { key: 'email', label: 'Googleアカウントのメール', type: 'email', value: cur ? cur.email : '', show: function (v) { return v.role !== 'recorder_only'; },
           hint: 'メールを変えると、Googleアカウントの結び付けも外れます（次にログインした人に結び付きます）' },
-        { key: 'shared', label: '共用のアカウント（iPad など。使う人が記録者を選ぶ）', type: 'checkbox', value: cur ? cur.shared : false }],
+        { key: 'shared', label: '共用のアカウント（教室の iPad など。記録者はこの表示名）', type: 'checkbox', value: cur ? cur.shared : false }],
       check: function (v) { return A.accountArgs(Object.assign({ id: cur && cur.id, active: cur ? cur.active : true }, v)); },
       onOk: function (args, b, m) { ui.write('account.save', args, { button: b, onDone: ui.closing(m, again) }); } });
   }

@@ -7,10 +7,10 @@
   var App = root.App, A = App.admin, h = App.ui.h, ui = App.ui;
   var MONTHS = { '': '期間なし', '6': '6か月', '12': '1年' };
 
-  function render(view) {
-    ui.clear(view);
+  function render(view0) {
+    var view = ui.stage(view0);   // 出し直しの間も今の画面を出したまま（尚哉 10/4①）
     view.appendChild(h('h1', { text: 'コース' }));
-    var again = function () { render(view); };
+    var again = function () { render(view0); };
     var list = h('div', { class: 'loading', text: '読み込み中…' });
     view.appendChild(h('div', { class: 'toolbar' }, [h('button', { class: 'btn primary', type: 'button', text: '＋ コースを足す', on: { click: function () { edit(null, [], again); } } })]));
     view.appendChild(h('p', { class: 'hint', text: '振替の種類は、これから作るクラスの初期値です。今あるクラスの振替の種類は変わりません' }));
@@ -30,8 +30,11 @@
               (next.length ? '・おすすめの次: ' + next.join('、') : '') })]),
           h('div', { class: 'row-actions' }, [
             h('button', { class: 'btn small', type: 'button', text: '直す', on: { click: function () { edit(c, all, again); } } }),
-            h('button', { class: 'btn small', type: 'button', text: hidden ? '表示に戻す' : '非表示にする', on: { click: function (ev) {
-              ui.write('course.hide', { id: c.id, hidden: !hidden }, { button: ev.currentTarget, onDone: again });
+            h('button', { class: 'btn small', type: 'button', text: hidden ? '表示に戻す' : '非表示にする', on: { click: function () {
+              // 生徒の非表示と同じ短い確認（U-28）
+              App.ui.confirmThen(hidden ? 'コースを表示に戻しますか' : 'コースを非表示にしますか',
+                [c.name + (hidden ? ' を一覧と選択肢に戻します' : ' を一覧と選択肢から隠します。記録は消えません（あとで戻せます）')], hidden ? '戻す' : '隠す',
+                function (okBtn, m) { App.ui.write('course.hide', { id: c.id, hidden: !hidden }, { button: okBtn, onDone: App.ui.closing(m, again) }); });
             } } })])]));
       });
       list.dataset.all = '';

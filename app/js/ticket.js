@@ -8,36 +8,40 @@
   'use strict';
   var App = root.App, core = App.core, O = App.ops, h = App.ui.h, ui = App.ui;
   var state = { studentId: '' };
+  App.ui.onForget(function () { state.studentId = ''; });   // ログアウト・人の切り替え（04a 小12）
   var ref = { sessions: [], classes: [] };
 
-  function render(view) {
+  function render(view0) {
     var f = App.takeFocus ? App.takeFocus() : '';
     if (f) state.studentId = f;
-    ui.clear(view);
+    var view = ui.stage(view0);   // 出し直しの間も今の画面を出したまま（尚哉 10/4①）
     view.appendChild(h('h1', { text: '振替券の台帳' }));
     view.appendChild(h('p', { class: 'sub', text: '期限は振替Dayの日程から毎回計算します。基準の振替Dayがまだ登録されていない券は「期限未確定」です。振替Dayを休み（中止）にしても、券は増えません' }));
-    var sel = h('select', { class: 'input', 'aria-label': '生徒' }, [h('option', { value: '', text: '生徒を選んでください' })]);
     var out = h('div', {});
-    view.appendChild(h('div', { class: 'toolbar np' }, [h('label', { class: 'field inline' }, [h('span', { text: '生徒' }), sel]), ui.printButton()]));
+    // 生徒は名前・ふりがなで探して選ぶ（生徒の画面と同じ探し方・U-22）
+    var pick = ui.studentPicker({ value: state.studentId, onChange: function (id) { state.studentId = id; load(view0, out); } });
+    view.appendChild(h('div', { class: 'toolbar np' }, [pick.el, ui.printButton()]));
     view.appendChild(out);
-    sel.addEventListener('change', function () { state.studentId = sel.value; load(view, out); });
+    // 生徒を選んだ状態なら、券の一覧も同時に読み始める（U-21: 順番に待たない）
+    var early = state.studentId ? fetchTickets(state.studentId) : null;
     Promise.all([ui.read('student.list', {}), ui.read('session.list', {}), ui.read('class.list', {})]).then(function (r) {
       ref.sessions = (r[1] && r[1].sessions) || [];
       ref.classes = (r[2] && r[2].classes) || [];
       if (!r[0]) return;
-      r[0].students.slice().sort(function (a, b) { return (a.kana || '') < (b.kana || '') ? -1 : 1; }).forEach(function (s) {
-        sel.appendChild(h('option', { value: s.id, text: s.name + (s.kana ? '（' + s.kana + '）' : '') }));
-      });
-      if (state.studentId) { sel.value = state.studentId; load(view, out); }
+      pick.setStudents(r[0].students);
+      if (state.studentId) load(view0, out, early);
     });
   }
 
-  function load(view, out) {
+  function fetchTickets(sid) {
+    return Promise.all([ui.read('ticket.list', { studentId: sid }), ui.read('makeup.list', { all: true }), ui.read('student.get', { studentId: sid })]);
+  }
+  function load(view, out, early) {
     ui.clear(out);
     if (!state.studentId) return;
     var sid = state.studentId, again = function () { render(view); };
     out.appendChild(h('p', { class: 'loading', text: '読み込み中…' }));
-    Promise.all([ui.read('ticket.list', { studentId: sid }), ui.read('makeup.list', { all: true }), ui.read('student.get', { studentId: sid })]).then(function (r) {
+    (early || fetchTickets(sid)).then(function (r) {
       ui.clear(out); out.className = 'print-area';
       if (!r[0] || !r[2]) { out.textContent = '読み込めませんでした'; return; }
       var st = r[2].student;
@@ -49,14 +53,15 @@
         h('button', { class: 'btn', type: 'button', text: '生徒の画面へ', on: { click: function () { App.go('students'); } } })]));
       if (!rows.length) { out.appendChild(h('p', { class: 'empty', text: '振替券はありません' })); return; }
       out.appendChild(h('div', { class: 'scroll-x' }, h('table', { class: 'grid' }, [
-        h('thead', {}, h('tr', {}, ['発行元の回', '根拠', '期限', '状態', '使用先', 'メモ', ''].map(function (t) { return h('th', { class: t ? '' : 'np', text: t }); }))),
+        h('thead', {}, h('tr', {}, ['発行元の回', '', '根拠', '期限', '状態', '使用先', 'メモ'].map(function (t) { return h('th', { class: t ? '' : 'np', text: t }); }))),
         h('tbody', {}, rows.map(function (k) {
-          return h('tr', { class: k.state === 'void' ? 'planned' : '' }, [h('td', { text: k.source }), h('td', { text: k.basis }),
-            h('td', { class: k.expiryUnset ? 'c-warn' : '', text: k.expiry }), h('td', { text: k.stateLabel }), h('td', { text: k.usedAt }),
-            h('td', { class: 'memo', text: k.notes.join('／') }),
-            h('td', { class: 'np' }, k.actions.map(function (a) {
+          // 操作は発行元の回のすぐ横（iPad 縦で右端が画面の外に出ない・U-13）。印刷では .np で消える
+          return h('tr', { class: k.state === 'void' ? 'planned' : '' }, [h('td', { text: k.source }),
+            h('td', { class: 'np act-first' }, k.actions.map(function (a) {
               return h('button', { class: 'btn small', type: 'button', text: O.TK_ACTION[a], on: { click: function () { act(a, k, st, again); } } });
-            }))]);
+            })), h('td', { text: k.basis }),
+            h('td', { class: k.expiryUnset ? 'c-warn' : '', text: k.expiry }), h('td', { text: k.stateLabel }), h('td', { text: k.usedAt }),
+            h('td', { class: 'memo', text: k.notes.join('／') })]);
         }))])));
     });
   }

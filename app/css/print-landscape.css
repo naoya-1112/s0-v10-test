@@ -1,0 +1,3 @@
+/* 月の出欠簿（回×生徒）は列が多いので A4 横で印刷する（04a 小17）。
+   index.html では media="not all"（効かない）で読み込んでおき、名簿・出欠簿の画面を開いている間だけ app.js が media="print" にする */
+@page { size: A4 landscape; margin: 10mm; }

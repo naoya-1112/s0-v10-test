@@ -60,11 +60,10 @@
     busy: '混み合っています。もう一度押してください',
     bad_receipt: '受付番号がありません。画面を再読み込みしてください',
     receipt_conflict: 'この受付番号は使えません。画面を再読み込みしてください',
-    bad_recorder: '記録者が見つかりません。記録者を選び直してください',
     unknown_fn: 'この操作はまだ使えません（画面とAPIの版が合っていない可能性があります）',
     bad_json: '送った内容が読めませんでした。画面を再読み込みしてください',
     internal: '処理の途中で止まりました。もう一度送ってください（同じ受付番号で大丈夫です）',
-    processing: '処理中です。少し待ってから画面を開き直してください',
+    processing: '処理中です。少し待ってから同じ内容のままもう一度押すと、結果を受け取れます（二重には保存されません）',
     network: 'つながりませんでした。電波を確かめて、もう一度押してください',
     not_configured_url: 'APIのURLが設定されていません（config.js）。教室の管理者にご連絡ください',
     invariant: '記録が合わなくなるため保存しませんでした'
@@ -117,6 +116,14 @@
     ]
   };
   function routesFor(role) { return ROUTES[role] || []; }
+  /** ナビの2段（04b U-20）: 毎日使う画面を1行目に、たまに使う画面は「その他」にまとめる。今いる画面が「その他」なら開いておく */
+  var NAV_MAIN = { home: 1, teacher: 1, dayroster: 1, students: 1, makeup: 1, contacts: 1, review: 1 };
+  function navGroups(role, current) {
+    var list = routesFor(role);
+    if (list.length <= 8) return { main: list, more: [], openMore: false };
+    var main = list.filter(function (r) { return NAV_MAIN[r.id]; }), more = list.filter(function (r) { return !NAV_MAIN[r.id]; });
+    return { main: main, more: more, openMore: more.some(function (r) { return r.id === current; }) };
+  }
   /** 開く画面を決める（役割に無い画面は先頭に戻す＝画面で隠しても権限の代わりにはしない。確認はサーバー） */
   function pickRoute(role, wanted) {
     var list = routesFor(role);
@@ -181,8 +188,95 @@
     return confirm ? [str(confirm)] : [];
   }
 
-  var core = { CLIENT_VER: CLIENT_VER, newReceiptId: newReceiptId, classify: classify, MESSAGES: MESSAGES, messageFor: messageFor,
-    loginFailureView: loginFailureView, routesFor: routesFor, pickRoute: pickRoute, todayJst: todayJst, addDays: addDays,
+  /**
+   * 一覧の手元の控え（直し第3弾・尚哉 10/4②）: クラス・コース・生徒・日程の一覧は、data_version が変わったときだけ読み直す。
+   * seen(v) は応答の版を見て 'new'（変わった→控えを全部捨てる）／'same'／'old'（届くのが遅れた古い応答＝控えにしない）／'none' を返す。
+   * 他の人の変更は、控えていない読み込み（振替の一覧など）の版で気づく。念のため ttlMs（既定10分）で古い控えは捨てる。
+   */
+  var CACHED_READS = { 'class.list': true, 'course.list': true, 'student.list': true, 'session.list': true };
+  function createRefCache(o) {
+    o = o || {};
+    var ttl = o.ttlMs || 600000, now = o.now || function () { return Date.now(); };
+    var ver = null, items = {};
+    return {
+      seen: function (v) {
+        if (v === undefined || v === null || v === '') return 'none';
+        v = String(v);
+        if (ver === null) { ver = v; return 'new'; }
+        if (v === ver) return 'same';
+        if (Number(v) < Number(ver)) return 'old';
+        ver = v; items = {}; return 'new';
+      },
+      get: function (k) {
+        var x = items[k];
+        if (!x) return null;
+        if (now() - x.at > ttl) { delete items[k]; return null; }
+        return JSON.parse(x.json);
+      },
+      put: function (k, val) { items[k] = { json: JSON.stringify(val), at: now() }; },
+      clear: function () { items = {}; },
+      version: function () { return ver; }
+    };
+  }
+  function cacheKey(fn, args) { return CACHED_READS[fn] ? fn + '\u0000' + JSON.stringify(args || {}) : ''; }
+
+  /* ---------- 記号を名前と日本語に（直し第3弾・04b U-04〜U-06・U-17・U-18。サーバーは Labels.js） ---------- */
+  var STATE_JA = { active: '有効', valid: '有効', used: '使用済み', present: '出席', absent: '欠席', makeup_present: '振替出席',
+    canceled: '中止', cancelled: '中止', void: '無効', voided: '取消', expired: '期限切れ', withdrawn: '取下げ', reserved: '予約中',
+    paused: '休止', ended: '終了', done: '済み', pending: '未確定', processing: '処理中', closed: '閉じた', open: '未解決',
+    corrected: '直した', lesson: '授業', makeupday: '振替Day', trial: '体験', individual: '個別', mutual: '相互振替', staff: 'スタッフ', self: '本人', teacher: '講師' };
+  var PREFIX_JA = { S_: '生徒', K_: 'クラス', C_: 'コース', D_: '回', E_: '在籍', AB_: '欠席連絡', AT_: '出席の記録', F_: '振替', MK_: '振替',
+    TK_: '振替券', N_: 'カルテ', CT_: '連絡', RV_: '要確認', W_: '退会', U_: 'アカウント', L_: '履歴' };
+  /** 中で使う操作名 → 日本語（U-17） */
+  var OP_JA = { 'attendance.mark': '出欠の記録', 'attendance.clear': '出欠を未記録に戻す', 'absence.add': '欠席連絡', 'absence.withdraw': '欠席連絡の取消',
+    'makeup.mutual': '相互振替の登録', 'makeup.reserve_day': '振替Dayの予約', 'makeup.cancel': '振替の取消', 'ticket.issue': '振替券の発行',
+    'ticket.void': '振替券の失効', 'ticket.extend': '振替券の期限の延長', 'ticket.used_fix': '振替券の使用済みの訂正', 'session.cancel': '回の中止',
+    'session.uncancel': '中止の解除', 'session.change': '日程の変更', 'session.generate': '開講日をまとめて作る', 'session.add': '回の追加',
+    'session.renumber': '回番号の変更', 'enroll': '入会・在籍の登録', 'move': 'クラスの移動', 'pause': '休止', 'resume': '休止からの再開',
+    'end_class': '1クラスの終了', 'withdraw': '退会', 'withdraw.void': '退会の取消', 'enrollment.correct': '在籍の訂正', 'enrollment.confirm': '在籍の確定',
+    'rollover': '次期への一括移行', 'continuation.decide': '継続確認の記録', 'note.add': 'カルテ', 'contact.mark': '連絡済みの印', 'student.save': '生徒の保存',
+    'review.resolve': '要確認の解決', 'receipt.close': '受付を閉じる' };
+  /** 変更履歴の列名 → 日本語（U-18） */
+  var FIELD_JA = { from_month: '開始の月', to_month: '終わりの月', class_id: 'クラス', student_id: '生徒', session_id: '回', status: '状態', state: '状態',
+    date: '日付', start_time: '始まり', end_time: '終わり', capacity: '定員', number: '回番号', result: '出欠', recorder: '記録者', from_paper: '紙から',
+    name: '名前', kana: 'ふりがな', phone: '電話', email: 'メール', line_name: 'LINEの名前', hidden: '非表示', reason: '理由', message: '内容',
+    contacted: '連絡済み', contacted_at: '連絡した時刻', contacted_by: '連絡した人', apply_month: '退会の月', received_on: '受けた日', expiry: '期限',
+    extend_to: '延長した期限', ticket_id: '振替券', absence_id: '欠席連絡', to_session_id: '行く回', source_session_id: '発行元の回', kind: '種類',
+    fixed: '固定', label: 'クラス名', teacher: '講師', weekday: '曜日', term: '期', course_id: 'コース', body: '本文', tag: 'タグ', at: '時刻',
+    canceled_at: '取り消した時刻', cancel_reason: '取消の理由', flag: '印', makeup_id: '振替', review: '要確認', used_at: '使った時刻' };
+  function opLabel(op) { return OP_JA[op] || String(op || ''); }
+  function fieldLabel(k) { return FIELD_JA[k] || String(k || ''); }
+  /**
+   * 文の中の記号・英語の状態・日付を日本語にする（画面側の共通の置き換え）。maps: {students:{id:名前}, classes:{id:名前}, sessions:{id:名前}}。
+   * 分からない記号は表の名前（「振替券」など）にする
+   */
+  function humanize(text, maps) {
+    if (text === null || text === undefined) return '';
+    maps = maps || {};
+    var out = String(text).replace(/\b([A-Z]{1,2}_)[0-9A-Za-z_-]+/g, function (id, pre) {
+      var m = pre === 'S_' ? maps.students : pre === 'K_' ? maps.classes : pre === 'D_' ? maps.sessions : (maps.others || null);
+      if (m && m[id]) return m[id];
+      return PREFIX_JA[pre] || id;
+    });
+    out = out.replace(/(^|[^A-Za-z_.])([a-z_]+)(?=[^A-Za-z_.]|$)/g, function (all, p, w) { return Object.prototype.hasOwnProperty.call(STATE_JA, w) ? p + STATE_JA[w] : all; });
+    out = out.replace(/\b(\d{4}-\d{2}-\d{2})(?![\d:T])/g, function (all) { return fmtDate(all); });
+    out = out.replace(/\b(\d{4})-(\d{2})(?![-\d])/g, function (all) { return fmtMonth(all); });
+    return out;
+  }
+  /** 一覧（生徒・クラス・回）から humanize の maps を作る */
+  function nameMaps(students, classes, sessions) {
+    var st = {}, cl = {}, se = {};
+    (students || []).forEach(function (x) { st[x.id] = x.name; });
+    (classes || []).forEach(function (x) { cl[x.id] = x.label; });
+    (sessions || []).forEach(function (x) { se[x.id] = fmtDate(x.date) + ' ' + (x.start_time || '') + (x.class_id && cl[x.class_id] ? ' ' + cl[x.class_id] : ''); });
+    return { students: st, classes: cl, sessions: se };
+  }
+
+  /** カルテのタグ（R-38・サーバー LogicTeacher.js NOTE_TAGS と同じ）。任意＝空も選べる */
+  var NOTE_TAGS = ['作品', '悩み・相談', '配慮', 'その他'];
+
+  var core = { humanize: humanize, nameMaps: nameMaps, opLabel: opLabel, fieldLabel: fieldLabel, createRefCache: createRefCache, cacheKey: cacheKey, CACHED_READS: CACHED_READS, NOTE_TAGS: NOTE_TAGS, CLIENT_VER: CLIENT_VER, newReceiptId: newReceiptId, classify: classify, MESSAGES: MESSAGES, messageFor: messageFor,
+    loginFailureView: loginFailureView, routesFor: routesFor, navGroups: navGroups, pickRoute: pickRoute, todayJst: todayJst, addDays: addDays,
     addMonths: addMonths, fmtDate: fmtDate, fmtMonth: fmtMonth, fmtDateTime: fmtDateTime, confirmLines: confirmLines };
   if (typeof module !== 'undefined' && module.exports) module.exports = core;
   else { root.App = root.App || {}; root.App.core = core; }

@@ -7,16 +7,18 @@
   var App = root.App, core = App.core, V = App.views, h = App.ui.h;
   var state = { date: '' };
 
-  function render(view) {
+  function render(view0) {
     if (!state.date) state.date = core.todayJst();
-    App.ui.clear(view);
-    view.appendChild(h('h1', { class: 'np', text: '当日名簿' }));
+    var view = App.ui.stage(view0);   // 出し直しの間も今の画面を出したまま（尚哉 10/4①）
+    var hd = V.dayHeading(state.date, core.todayJst(), 'roster');
+    view.appendChild(h('h1', { class: 'np', text: hd.title === '今日の名簿' ? '当日名簿' : hd.title }));
+    if (hd.alert) view.appendChild(h('div', { class: 'date-alert np', role: 'alert', text: hd.alert }));
     var pick = h('input', { type: 'date', class: 'input', value: state.date, 'aria-label': '日付' });
-    pick.addEventListener('change', function () { if (pick.value) { state.date = pick.value; render(view); } });
+    pick.addEventListener('change', function () { if (pick.value) { state.date = pick.value; render(view0); } });
     view.appendChild(App.ui.stepper(core.fmtDate(state.date),
-      function () { state.date = core.addDays(state.date, -1); render(view); },
-      function () { state.date = core.todayJst(); render(view); },
-      function () { state.date = core.addDays(state.date, 1); render(view); }));
+      function () { state.date = core.addDays(state.date, -1); render(view0); },
+      function () { state.date = core.todayJst(); render(view0); },
+      function () { state.date = core.addDays(state.date, 1); render(view0); }));
     view.appendChild(h('div', { class: 'toolbar np' }, [pick, App.ui.printButton()]));
     var body = h('div', { class: 'loading', text: '読み込み中…' });
     view.appendChild(body);
@@ -36,11 +38,13 @@
               return h('tr', {}, [h('td', { text: r.no }), h('td', { class: 'name', text: r.name }), h('td', { text: r.kana }),
                 h('td', { text: r.plan }), h('td', { class: 'memo', text: r.memo }), h('td', { class: 'mark', text: r.attendance })]);
             }))
-          ])
+          ]),
+          s.plannedNote ? h('p', { class: 'sub planned-note', text: s.plannedNote }) : null   // 表の外に別に書く（尚哉 10/4）
         ]));
       });
     });
   }
 
-  App.screens.dayroster = function (view) { render(view); };
+  /** 開くたび（ナビ・タブに戻ったとき）今日に戻す（04b U-01） */
+  App.screens.dayroster = function (view) { state.date = core.todayJst(); render(view); };
 })(window);

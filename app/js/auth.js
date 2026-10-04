@@ -9,6 +9,7 @@
   'use strict';
   var App = root.App, core = App.core, doc = root.document;
   var gisReady = false;
+  var lastWho = null;   // セッション切れの前に入っていた人（ログインし直したのが同じ人か見分ける）
 
   function el(id) { return doc.getElementById(id); }
 
@@ -18,7 +19,6 @@
     if (w) w.textContent = who ? 'ログイン中: ' + who.name + (who.role === 'staff' ? '（スタッフ）' : '（講師）') : '';
     var out = el('logout');
     if (out) out.hidden = !who;
-    App.recorderBox();
   }
 
   /** ログインの面を出す。reason は表示したまま残す（次の操作まで消さない） */
@@ -40,9 +40,29 @@
 
   /** relogin（セッション切れ）: 入力と受付番号は ui.js の App.pending に残っている */
   function needLogin(msg) {
+    lastWho = App.session.who() || lastWho;
     App.session.clear();
+    hideScreens(true);   // 個人情報の画面を隠す（入力は App.pending に残っている・04a 中4）
     showWho();
     showLogin(msg || core.MESSAGES.relogin, '');
+  }
+
+  /** 画面（一覧・ナビ・入力画面）を隠す／出す。消さずに隠すので、同じ人がログインし直せば入力の続きから送れる */
+  function hideScreens(on) {
+    ['view', 'nav'].forEach(function (id) { var e = el(id); if (e) e.hidden = on; });
+    var m = el('modal');
+    if (m) m.hidden = on ? true : !(m.children && m.children.length);
+  }
+
+  /** 前の人の名残（送り直し待ちの操作・帯・受付番号・入力画面）を消す（04a 中3・中5・尚哉の判断3） */
+  function forgetPrevious() {
+    App.pending = null;
+    App.ui.banner('');
+    App.ui.forgetUnsettled();
+    if (App.ui.forgetCache) App.ui.forgetCache();
+    if (App.ui.forgetScreens) App.ui.forgetScreens();   // 各画面が覚えている「選んだ生徒」等も消す（04a 小12）
+    var m = el('modal');
+    if (m) { m.hidden = true; App.ui.clear(m); }
   }
 
   function renderButton() {
@@ -67,11 +87,17 @@
     App.client.call('auth.login', {}, { idToken: resp && resp.credential }).then(function (r) {
       if (r.kind === 'ok' && r.data.sk) {
         var d = r.data;
+        var before = lastWho || (prev && prev.who);
+        var same = !!(before && before.email === d.email && before.role === d.role);
+        lastWho = null;
+        // 前と違う人・役割なら、前の人の操作・記録者・画面を残さない（共用 iPad・04a 中3・中4）
+        if (before && !same) forgetPrevious();
         App.session.set(d.sk, { name: d.name, role: d.role, email: d.email, shared: !!d.shared });
         el('login').hidden = true;
+        hideScreens(false);
         showWho();
-        // relogin で残した操作があれば、今の画面（入力）をそのまま残して送り直しを案内する
-        if (App.pending) App.ui.resendPending(); else App.start();
+        // 同じ人が relogin で残した操作があれば、今の画面（入力）をそのまま残して送り直しを案内する。それ以外は役割の画面を作り直す
+        if (App.pending && same) App.ui.resendPending(); else { App.pending = null; App.start(); }
         return;
       }
       // 失敗: 理由を残し、前のログインは消さない
@@ -84,6 +110,8 @@
     var sk = App.session.sk();
     var done = function () {
       App.session.clear();
+      lastWho = null;
+      forgetPrevious();
       try { root.google.accounts.id.disableAutoSelect(); } catch (e) { /* GIS が無いときは何もしない */ }
       showWho();
       App.ui.clear(el('view'));
@@ -114,6 +142,8 @@
 
   /** GIS のスクリプトが後から読み込まれたらボタンを出し直す */
   root.onGisLoad = function () { if (!el('login').hidden) renderButton(); };
+  // index.html の CSP でインラインの onload を使わないため、ページの読み込み完了（async の GIS も含む）で出し直す（04a 小16）
+  if (root.addEventListener) root.addEventListener('load', function () { root.onGisLoad(); });
 
   App.auth = { boot: boot, logout: logout, needLogin: needLogin, showWho: showWho, onCredential: onCredential };
 })(window);

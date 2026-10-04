@@ -4,16 +4,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
+<!-- 保険の CSP（04a 小16）。読むのは自分のファイル・Google ログイン（GIS）・サーバー（config.js の apiUrl＝script.google.com）だけ。
+     インラインの script は使わない（GIS の読み込み完了は auth.js が load で受ける）。GIS のボタンの見た目のため style は Google の分と inline を許す -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://accounts.google.com/gsi/; frame-src https://accounts.google.com/gsi/; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; img-src 'self' data: https://*.googleusercontent.com https://*.gstatic.com; object-src 'none'; base-uri 'self'; form-action 'none'">
 <title>金木犀舎 名簿</title>
 <link rel="stylesheet" href="css/app.css">
+<link id="page-landscape" rel="stylesheet" href="css/print-landscape.css" media="not all">
 </head>
 <body>
 <header class="topbar np">
   <div class="brand">金木犀舎 名簿</div>
   <div class="who-box">
     <span id="who"></span>
-    <span id="recorder" hidden></span>
-    <button id="logout" class="btn" type="button" hidden>ログアウト</button>
+    <span class="who-gap"></span>
+    <button id="logout" class="btn small logout" type="button" hidden>ログアウト</button>
   </div>
 </header>
 <div id="banner" class="banner np" hidden></div>
@@ -56,6 +60,6 @@
 <script src="js/review.js"></script>
 <script src="js/continuation.js"></script>
 <script src="js/home.js"></script>
-<script src="https://accounts.google.com/gsi/client" async defer onload="window.onGisLoad && window.onGisLoad()"></script>
+<script id="gis-client" src="https://accounts.google.com/gsi/client" async defer></script>
 </body>
 </html>

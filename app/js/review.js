@@ -9,27 +9,30 @@
   'use strict';
   var App = root.App, core = App.core, O = App.ops, A = App.admin, h = App.ui.h, ui = App.ui;
   var state = { receiptId: '' };
-  var ref = { sessions: [], classes: [], courses: [], names: {} };
+  App.ui.onForget(function () { state.receiptId = ''; });   // ログアウト・人の切り替え（04a 小12）
+  var ref = { sessions: [], classes: [], courses: [], names: {}, students: [] };
 
-  function loadRef() {
-    return Promise.all([ui.read('session.list', {}), ui.read('class.list', {}), ui.read('student.list', { includeHidden: true }), ui.read('course.list', {})]).then(function (r) {
+  /** 参照の一覧と、続けて読むもの（extra）を同時に読む（stage が読み込み完了を待てるよう、読みを一度に始める） */
+  function loadRef(extra) {
+    return Promise.all([ui.read('session.list', {}), ui.read('class.list', {}), ui.read('student.list', { includeHidden: true }), ui.read('course.list', {}), extra]).then(function (r) {
       ref.sessions = (r[0] && r[0].sessions) || [];
       ref.classes = (r[1] && r[1].classes) || [];
       ref.names = {};
       ((r[2] && r[2].students) || []).forEach(function (s) { ref.names[s.id] = s.name; });
       ref.courses = (r[3] && r[3].courses) || [];
+      ref.students = (r[2] && r[2].students) || [];
+      return r[4];
     });
   }
 
-  function render(view) {
-    if (state.receiptId) { renderReceipt(view); return; }
-    ui.clear(view);
+  function render(view0) {
+    if (state.receiptId) { renderReceipt(view0); return; }
+    var view = ui.stage(view0);   // 読み込みの間も今の画面を出したまま（尚哉 10/4①）
     view.appendChild(h('h1', { text: '要確認' }));
     view.appendChild(h('p', { class: 'sub', text: 'ここにあるものは、解決するまでその券・生徒・回の新しい予約を止めています。上から順に片付けてください' }));
-    var body = h('div', { class: 'loading', text: '読み込み中…' });
+    var body = h('div', {});
     view.appendChild(body);
-    loadRef().then(function () { return ui.read('review.list', {}); }).then(function (d) {
-      ui.clear(body); body.className = '';
+    loadRef(ui.read('review.list', {})).then(function (d) {
       if (!d) { body.textContent = '読み込めませんでした'; return; }
       var rows = O.reviewRows(d.items, ref.names, ref.sessions, ref.classes);
       // 止まった操作を先に（他の操作を止めているため）
@@ -38,8 +41,8 @@
       if (!rows.length) { body.appendChild(h('p', { class: 'empty', text: '要確認はありません' })); return; }
       rows.forEach(function (r) {
         var acts = r.source === 'receipt'
-          ? [h('button', { class: 'btn primary', type: 'button', text: '調べる・直す', on: { click: function () { state.receiptId = r.receipt_id; render(view); } } })]
-          : [h('button', { class: 'btn primary', type: 'button', text: '解決する', on: { click: function () { resolve(r, function () { render(view); }); } } })];
+          ? [h('button', { class: 'btn primary', type: 'button', text: '調べる・直す', on: { click: function () { state.receiptId = r.receipt_id; render(view0); } } })]
+          : [h('button', { class: 'btn primary', type: 'button', text: '解決する', on: { click: function () { resolve(r, function () { render(view0); }); } } })];
         body.appendChild(h('div', { class: 'card' }, [h('h2', {}, [r.title, r.source === 'receipt' ? h('span', { class: 'tag err', text: '他の操作を止めています' }) : null]),
           h('p', { text: r.what }), h('p', {}, [h('strong', { text: r.who }), r.where ? '　' + r.where : '']),
           r.detail ? h('p', { class: 'sub', text: r.detail }) : null, h('div', { class: 'toolbar np' }, acts)]));
@@ -59,19 +62,17 @@
 
   /* ---------- 止まった操作: 調べる → 直す → 閉じる ---------- */
 
-  function renderReceipt(view) {
-    var rid = state.receiptId, again = function () { render(view); };
-    ui.clear(view);
-    view.appendChild(h('div', { class: 'toolbar np' }, [h('button', { class: 'btn', type: 'button', text: '◀ 要確認の一覧へ', on: { click: function () { state.receiptId = ''; render(view); } } })]));
-    var body = h('div', { class: 'loading', text: '読み込み中…' });
+  function renderReceipt(view0) {
+    var view = ui.stage(view0), rid = state.receiptId, again = function () { render(view0); };
+    view.appendChild(h('div', { class: 'toolbar np' }, [h('button', { class: 'btn', type: 'button', text: '◀ 要確認の一覧へ', on: { click: function () { state.receiptId = ''; render(view0); } } })]));
+    var body = h('div', {});
     view.appendChild(body);
-    loadRef().then(function () { return ui.read('receipt.inspect', { receiptId: rid }); }).then(function (d) {
-      ui.clear(body); body.className = '';
+    loadRef(ui.read('receipt.inspect', { receiptId: rid })).then(function (d) {
       if (!d) { body.textContent = '読み込めませんでした'; return; }
       var v = O.inspectView(d), adv = O.closeAdvice(v);
       var who = (d.student_ids || []).map(function (x) { return ref.names[x] || x; }).join('・');
       body.appendChild(h('h1', { text: '途中で止まった操作' }));
-      body.appendChild(h('p', {}, ['受付番号 ', h('code', { text: v.receipt_id }), '　操作: ' + v.op + '　' + v.at]));
+      body.appendChild(h('p', {}, ['操作: ' + v.opText + '　受け付けた時刻 ' + v.at]));
       body.appendChild(h('p', {}, ['対象: ', h('strong', { text: who || '（生徒なし）' }), '　' + (d.session_ids || []).map(function (x) {
         return O.sesLabel(ref.sessions.filter(function (s) { return s.id === x; })[0], ref.classes); }).join('／')]));
       if (v.closed) { body.appendChild(h('p', { class: 'tag ok', text: 'この受付はもう閉じています' })); return; }
@@ -80,10 +81,10 @@
       body.appendChild(h('p', { class: 'sub', text: v.summary }));
       var tb = h('tbody', {});
       body.appendChild(h('div', { class: 'scroll-x' }, h('table', { class: 'grid' }, [
-        h('thead', {}, h('tr', {}, ['表', 'しようとしたこと', '番号', '今', '中身', ''].map(function (t) { return h('th', { class: t ? '' : 'np', text: t }); }))), tb])));
+        h('thead', {}, h('tr', {}, ['表', 'しようとしたこと', '誰の・どの回の', '今', '中身', ''].map(function (t) { return h('th', { class: t ? '' : 'np', text: t }); }))), tb])));
       v.items.forEach(function (it) {
         var btn = it.repair ? h('button', { class: 'btn small', type: 'button', text: '直す', on: { click: function () { repairItem(it, d, again); } } }) : null;
-        tb.appendChild(h('tr', {}, [h('td', { text: it.table }), h('td', { text: it.type }), h('td', { text: it.id }), h('td', { text: it.have }),
+        tb.appendChild(h('tr', {}, [h('td', { text: it.table }), h('td', { text: it.type }), h('td', { text: itemWho(it, d) }), h('td', { text: it.have }),
           h('td', { class: it.ok ? '' : 'c-warn', text: it.same }), h('td', { class: 'np' }, btn)]));
       });
 
@@ -94,9 +95,18 @@
 
       body.appendChild(h('h2', { class: 'section-title', text: '3. 閉じる（止めを解く）' }));
       var probs = h('div', { role: 'alert' });
-      body.appendChild(h('div', { class: 'toolbar np' }, [h('button', { class: 'btn primary', type: 'button', text: '受付を閉じる', on: { click: function () { close(rid, adv, probs, function () { state.receiptId = ''; render(view); }); } } })]));
+      body.appendChild(h('div', { class: 'toolbar np' }, [h('button', { class: 'btn primary', type: 'button', text: '受付を閉じる', on: { click: function () { close(rid, adv, probs, function () { state.receiptId = ''; render(view0); }); } } })]));
       body.appendChild(probs);
     });
+  }
+
+  /** 表の1行の「誰の・どの回の」: その受付の対象の生徒と回（記号でなく名前）。1件も分からなければ記号を表の名前にして出す */
+  function itemWho(it, d) {
+    var maps = core.nameMaps(ref.students, ref.classes, ref.sessions);
+    var who = (d.student_ids || []).map(function (x) { return ref.names[x] || core.humanize(x, maps); }).join('・');
+    var where = (d.session_ids || []).map(function (x) { return O.sesLabel(ref.sessions.filter(function (s) { return s.id === x; })[0], ref.classes); }).join('／');
+    var text = [who, where].filter(Boolean).join('　');
+    return text || core.humanize(it.id, maps);
   }
 
   function close(rid, adv, probs, done) {
@@ -122,7 +132,7 @@
   /** 表の1行から直す（その記録の取消・訂正。全部 repair_of つき） */
   function repairItem(it, d, again) {
     var rid = d.receipt_id, sid = (d.student_ids || [])[0], st = { id: sid, name: ref.names[sid] || sid };
-    if (it.repair === 'absence') { App.makeupOps.absenceWithdraw(st, { id: it.id, session: '（欠席連絡 ' + it.id + '）' }, again, rid); return; }
+    if (it.repair === 'absence') { App.makeupOps.absenceWithdraw(st, { id: it.id, session: '（' + itemWho(it, d) + '）' }, again, rid); return; }
     if (it.repair === 'makeup') {
       ui.read('makeup.list', { all: true }).then(function (x) {
         if (!x) return;
@@ -170,7 +180,6 @@
       },
       onOk: function (args, okBtn, m) {
         var fn = args.result ? 'attendance.mark' : args.reason ? 'ticket.issue' : 'attendance.clear';
-        if (App.needRecorder && /^attendance/.test(fn) && App.needRecorder()) return;
         ui.write(fn, args, { button: okBtn, onDone: ui.closing(m, again) });
       } });
   }

@@ -7,12 +7,12 @@
   'use strict';
   var App = root.App, core = App.core, O = App.ops, h = App.ui.h, ui = App.ui;
 
-  function render(view) {
-    ui.clear(view);
+  function render(view0) {
+    var view = ui.stage(view0);   // 出し直しの間も今の画面を出したまま（尚哉 10/4①）
     view.appendChild(h('h1', { text: 'ホーム　' + core.fmtDate(core.todayJst()) }));
     var body = h('div', { class: 'loading', text: '読み込み中…' });
     view.appendChild(body);
-    view.appendChild(h('div', { class: 'toolbar np' }, [h('button', { class: 'btn', type: 'button', text: '数え直す', on: { click: function () { render(view); } } })]));
+    view.appendChild(h('div', { class: 'toolbar np' }, [h('button', { class: 'btn', type: 'button', text: '数え直す', on: { click: function () { render(view0); } } })]));
     ui.read('home.counts', {}).then(function (d) {
       ui.clear(body); body.className = 'home-cards';
       if (!d) { body.textContent = '読み込めませんでした'; return; }

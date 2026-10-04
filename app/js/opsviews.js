@@ -53,6 +53,7 @@
       var badges = [];
       if (f.staff_override === '1' || f.staff_override === true) badges.push('ルール外・満席の手登録');
       if (f.flag === 'source_canceled') badges.push('元の授業が中止（予約を残した）');
+      if (f.flag === 'dest_date_changed') badges.push('行く回の日付が変わった（本人に確認）');   // 01 M1・R-26
       if (to && to.status === 'canceled') badges.push('行く回が中止になっています');
       return { id: f.id, student_id: f.student_id, name: f.student_name || f.student_id, kind: MK_KIND[f.kind] || f.kind, kindKey: f.kind,
         to: sesLabel(to, classes), to_date: f.to_date || (to && to.date) || '', canceled: f.status === 'canceled',
@@ -94,6 +95,13 @@
   }
 
   /** 生徒が在籍しているクラスの回（欠席連絡・振替の元に選ぶ）。enrollments は student.get の在籍 */
+  /** 欠席連絡の代行の「休む回」（04b U-08）: 今日以降を近い順に先に、終わった回は見出しの下に新しい順。既定は次の回 */
+  function absenceOptions(own, classes, today) {
+    var fut = (own || []).filter(function (x) { return x.date >= today; }), past = (own || []).filter(function (x) { return x.date < today; }).reverse();
+    var opts = sesOptions(fut, classes, '回を選んでください');
+    if (past.length) opts = opts.concat([{ value: '', label: '―― 終わった回（新しい順） ――' }], sesOptions(past, classes));
+    return { options: opts, def: fut.length ? fut[0].id : '' };
+  }
   function ownSessions(sessions, enrollments, from) {
     var cls = {};
     (enrollments || []).forEach(function (e) { if (s(e['void']) !== '1' && e.state === 'enrolled') cls[e.class_id] = e; });
@@ -183,11 +191,11 @@
         return { key: it.receipt_id, source: 'receipt', title: k.title, what: k.what, receipt_id: it.receipt_id,
           who: (it.student_ids || []).map(function (x) { return nm[x] || x; }).join('・'),
           where: (it.session_ids || []).map(function (x) { return sesLabel(ses[x], classes); }).join('／'),
-          detail: '操作: ' + (it.op_type || '') + '・受け付けた時刻 ' + core.fmtDateTime(it.received_at) + (it.minutes !== null && it.minutes !== undefined ? '（' + it.minutes + '分前）' : '') };
+          opText: core.opLabel(it.op_type), detail: '操作: ' + core.opLabel(it.op_type) + '・受け付けた時刻 ' + core.fmtDateTime(it.received_at) + (it.minutes !== null && it.minutes !== undefined ? '（' + it.minutes + '分前）' : '') };
       }
       return { key: it.review_id, source: 'review', title: k.title, what: k.what, review_id: it.review_id, kind: it.kind,
         who: nm[it.student_id] || it.student_id || '', where: it.session_id ? sesLabel(ses[it.session_id], classes) : '',
-        detail: it.ticket_id ? '振替券 ' + it.ticket_id : '',
+        detail: it.ticket_id ? '振替券が関わっています' : '',
         choices: (RESOLUTIONS[it.kind] || []).map(function (r) { return { value: r, label: RESOLUTION[r].label, reason: RESOLUTION[r].reason, reserve: RESOLUTION[r].reserve }; }) };
     });
   }
@@ -218,7 +226,7 @@
         have: have, same: same, ok: ok, repair: it.exists && TABLE_HINT[it.table] ? TABLE_HINT[it.table] : '' };
     });
     var done = items.filter(function (x) { return x.ok; }).length;
-    return { receipt_id: d.receipt_id, op: d.op_type, at: core.fmtDateTime(d.received_at), closed: d.status !== 'processing',
+    return { receipt_id: d.receipt_id, op: d.op_type, opText: core.opLabel(d.op_type), at: core.fmtDateTime(d.received_at), closed: d.status !== 'processing',
       summary: d.plan_omitted ? 'しようとしたことの中身は大きすぎて残っていません（表で直接確かめてください）'
         : 'しようとしたこと ' + items.length + ' 件のうち、予定どおり書かれているのは ' + done + ' 件',
       allWritten: items.length > 0 && done === items.length, noneWritten: items.length > 0 && items.every(function (x) { return x.untouched; }),
@@ -242,7 +250,7 @@
 
   /* ---------- 継続確認・一括移行（S1-36） ---------- */
 
-  var CONCL = { 'continue': '継続（次のクラスへ）', move: '別のクラスへ移動', end: 'このクラスだけ終了', pause: '休止' };
+  var CONCL = { 'continue': '継続（同じコースの次のクラスへ）', move: '別のクラス・コースへ移動', end: 'このクラスだけ終了', pause: '休止' };
   function continuationView(d, classes, courses, names) {
     var cl = byId(classes), co = byId(courses), nm = names || {};
     var label = function (id) { return A.classLabel(cl[id], co) || id; };
@@ -251,7 +259,10 @@
         return { enrollment_id: r.enrollment_id, student_id: r.student_id, name: nm[r.student_id] || r.student_id, cls: label(r.class_id),
           end: core.fmtMonth(r.end_month), end_month: r.end_month, switch_month: r.switch_month, sw: core.fmtMonth(r.switch_month),
           late: false, move_planned: !!r.move_planned,
-          options: (r.candidates || []).map(function (id, i) { return { value: id, label: (i === 0 ? '★ ' : '') + label(id) }; }) };
+          options: (r.candidates || []).map(function (id, i) { return { value: id, label: (i === 0 ? '★ ' : '') + label(id) }; }),
+          // 「継続」は同じコースのクラスだけ（尚哉の判断 10/4）
+          contOptions: (r.candidates || []).filter(function (id) { return cl[id] && cl[r.class_id] && cl[id].course_id === cl[r.class_id].course_id; })
+            .map(function (id) { return { value: id, label: label(id) }; }) };
       }),
       paused: ((d && d.paused) || []).map(function (p) {
         return { name: nm[p.student_id] || p.student_id, student_id: p.student_id, cls: label(p.class_id),
@@ -265,8 +276,12 @@
     if (!CONCL[c]) return { error: '結論を選んでください' };
     var a = { enrollmentId: row.enrollment_id, conclusion: c }, lines;
     if (c === 'continue' || c === 'move') {
-      if (!s(f.classId)) return { error: '次のクラスを選んでください' };
-      a.classId = s(f.classId);
+      var cid = s(c === 'continue' && f.contClassId !== undefined ? f.contClassId : f.classId);
+      if (!cid) return { error: '次のクラスを選んでください' };
+      if (c === 'continue' && row.contOptions && !row.contOptions.some(function (o) { return o.value === cid; })) {
+        return { error: '「継続」は同じコースのクラスだけ選べます。別のコースへは「移動」を選んでください' };
+      }
+      a.classId = cid;
       lines = [row.name + ' さん: ' + row.cls + ' は ' + row.end + ' で終わり、' + row.sw + 'から ' + (classLabelOf ? classLabelOf(a.classId) : a.classId) + ' に確定で入ります',
         c === 'continue' ? '「継続」として記録します' : '「移動」として記録します', '間違えたときは生徒の画面の在籍の「訂正」で直します（自動では戻りません）'];
     } else if (c === 'end') {
@@ -303,7 +318,7 @@
     ];
   }
 
-  var O = { nowJst: nowJst, started: started, sesLabel: sesLabel, sesOptions: sesOptions, makeupRows: makeupRows, cancelPlan: cancelPlan, cancelArgs: cancelArgs,
+  var O = { nowJst: nowJst, started: started, sesLabel: sesLabel, sesOptions: sesOptions, absenceOptions: absenceOptions, makeupRows: makeupRows, cancelPlan: cancelPlan, cancelArgs: cancelArgs,
     absenceRows: absenceRows, ownSessions: ownSessions, ticketRows: ticketRows, TK_ACTION: TK_ACTION, extendArgs: extendArgs, reasonArgs: reasonArgs,
     voidReason: voidReason, reviewRows: reviewRows, resolveArgs: resolveArgs, inspectView: inspectView, closeAdvice: closeAdvice, closeArgs: closeArgs,
     closeProblems: closeProblems, continuationView: continuationView, decideArgs: decideArgs, CONCL: CONCL, rolloverArgs: rolloverArgs, homeCards: homeCards };

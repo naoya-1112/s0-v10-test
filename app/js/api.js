@@ -35,7 +35,7 @@
   }
 
   /**
-   * opts: { url, fetch, session, recorder:()=>名前, timeoutMs?, setTimeout?, clearTimeout?, AbortController? }
+   * opts: { url, fetch, session, timeoutMs?, setTimeout?, clearTimeout?, AbortController? }
    * call(fn, args, {receiptId?}) → Promise<classify の結果（kind・data）>。kind='fail' は2回目も失敗したとき
    */
   function createApi(opts) {
@@ -66,8 +66,7 @@
       var body = { fn: fn, client_ver: core.CLIENT_VER, args: args || {} };
       if (fn !== 'auth.login') body.sk = opts.session.sk();
       if (o.idToken) body.idToken = o.idToken;
-      var rec = opts.recorder ? opts.recorder() : '';
-      if (rec) body.recorder = rec;
+      // 記録者は送らない（サーバーがログインの表示名を残す・尚哉 10/4）
       if (o.receiptId) body.receiptId = o.receiptId;
       return once(body).then(function (r) {
         // 再送は「受付番号つきの書き込み」と「読むだけ」の失敗に1回だけ。ログインは再送しない（IDトークンは一度きり・5-1）

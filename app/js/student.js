@@ -8,6 +8,7 @@
   'use strict';
   var App = root.App, core = App.core, A = App.admin, h = App.ui.h, ui = App.ui;
   var state = { studentId: '', q: '', hidden: false };
+  ui.onForget(function () { state.studentId = ''; state.q = ''; state.hidden = false; });   // ログアウト・人の切り替え（04a 小12）
   var ref = { classes: [], courses: [] };
 
   function loadRef() {
@@ -27,13 +28,13 @@
 
   /* ---------- 一覧 ---------- */
 
-  function renderList(view) {
-    ui.clear(view);
+  function renderList(view0) {
+    var view = ui.stage(view0);   // 出し直しの間も今の画面を出したまま（尚哉 10/4①）
     view.appendChild(h('h1', { text: '生徒' }));
     var q = h('input', { type: 'search', class: 'input', placeholder: '名前・ふりがなの一部', value: state.q, 'aria-label': '名前で探す' });
     var hid = h('input', { type: 'checkbox', class: 'check' });
     hid.checked = state.hidden;
-    var add = h('button', { class: 'btn primary', type: 'button', text: '＋ 新しい生徒を登録', on: { click: function () { editStudent(view, null); } } });
+    var add = h('button', { class: 'btn primary', type: 'button', text: '＋ 新しい生徒を登録', on: { click: function () { editStudent(view0, null); } } });
     var list = h('div', { class: 'loading', text: '読み込み中…' });
     view.appendChild(h('div', { class: 'toolbar np' }, [h('label', { class: 'field inline' }, [h('span', { text: '名前で探す' }), q]),
       h('label', { class: 'choice' }, [hid, ' 非表示の生徒も見る']), add]));
@@ -47,14 +48,16 @@
       rows.forEach(function (s) {
         list.appendChild(h('div', { class: 'list-row' + (s.hidden ? ' off' : '') }, [
           h('div', { class: 'main' }, [h('strong', { text: s.name }), h('span', { class: 'kana', text: '　' + s.kana }),
-            s.hidden ? h('span', { class: 'tag', text: '非表示' }) : null, s.has_link ? null : h('span', { class: 'tag plan', text: 'リンク未発行' })]),
-          h('button', { class: 'btn', type: 'button', text: '開く', on: { click: function () { state.studentId = s.id; render(view); } } })]));
+            s.hidden ? h('span', { class: 'tag', text: '非表示' }) : null, s.has_link ? null : h('span', { class: 'tag plan', text: 'リンク未発行' }),
+            h('div', { class: 'sub', text: '今のクラス: ' + A.currentClassText(s.current, ref.classes, ref.courses) })]),
+          h('button', { class: 'btn', type: 'button', text: '開く', on: { click: function () { state.studentId = s.id; render(view0); } } })]));
       });
     };
     q.addEventListener('input', function () { state.q = q.value; draw(); });
     hid.addEventListener('change', function () { state.hidden = hid.checked; load(); });
     var load = function () {
-      ui.read('student.list', { includeHidden: state.hidden }).then(function (d) {
+      Promise.all([ui.read('student.list', { includeHidden: state.hidden }), loadRef()]).then(function (r) {
+        var d = r[0];
         if (!d) { list.textContent = '読み込めませんでした'; return; }
         data = d.students; draw();
       });
@@ -64,7 +67,7 @@
 
   function editStudent(view, cur) {
     ui.formModal({ title: cur ? '生徒の情報を直す' : '新しい生徒を登録', okLabel: '保存する',
-      fields: A.STUDENT_FIELDS.map(function (f) { return { key: f.key, label: f.label + (f.required ? '（必ず）' : ''), type: f.type, value: cur ? cur[f.key] : '' }; }),
+      fields: A.studentFormFields(cur),
       check: function (v) { return A.studentArgs(cur, v); },
       onOk: function (args, okBtn, m) {
         ui.write('student.save', args, { button: okBtn, onDone: ui.closing(m, function (d) {
@@ -75,10 +78,10 @@
 
   /* ---------- 詳細 ---------- */
 
-  function render(view) {
-    if (!state.studentId) { renderList(view); return; }
-    ui.clear(view);
-    var back = h('button', { class: 'btn np', type: 'button', text: '◀ 生徒の一覧へ', on: { click: function () { state.studentId = ''; render(view); } } });
+  function render(view0) {
+    if (!state.studentId) { renderList(view0); return; }
+    var view = ui.stage(view0);   // 出し直しの間も今の画面を出したまま（尚哉 10/4①）
+    var back = h('button', { class: 'btn np', type: 'button', text: '◀ 生徒の一覧へ', on: { click: function () { state.studentId = ''; render(view0); } } });
     view.appendChild(h('div', { class: 'toolbar np' }, [back]));
     var body = h('div', { class: 'loading', text: '読み込み中…' });
     view.appendChild(body);
@@ -86,7 +89,7 @@
       var d = r[0];
       ui.clear(body); body.className = '';
       if (!d) { body.textContent = '読み込めませんでした'; return; }
-      detail(view, body, d);
+      detail(view0, body, d);
     });
   }
 
@@ -95,7 +98,7 @@
     body.appendChild(h('h1', {}, [s.name, h('span', { class: 'kana', text: '　' + s.kana }), s.hidden ? h('span', { class: 'tag', text: '非表示' }) : null]));
     // 基本情報
     var info = h('table', { class: 'grid' }, h('tbody', {}, A.STUDENT_FIELDS.filter(function (f) { return f.key !== 'name' && f.key !== 'kana'; }).map(function (f) {
-      return h('tr', {}, [h('th', { text: f.label }), h('td', { text: f.type === 'date' && s[f.key] ? core.fmtDate(s[f.key]) : (s[f.key] || '') })]);
+      return h('tr', {}, [h('th', { text: f.label }), h('td', { text: A.studentFieldText(f, s[f.key], core.fmtDate) })]);
     })));
     var hideBtn = h('button', { class: 'btn', type: 'button', text: s.hidden ? '一覧に戻す（非表示をやめる）' : '一覧から隠す（非表示）' });
     hideBtn.addEventListener('click', function () {
@@ -111,8 +114,7 @@
     // 在籍
     body.appendChild(h('h2', { class: 'section-title', text: '在籍（過去〜予定）' }));
     body.appendChild(h('div', { class: 'toolbar np' }, [
-      h('button', { class: 'btn primary', type: 'button', text: '＋ 入会（クラスに入る）', on: { click: function () { enroll(s, again); } } }),
-      h('button', { class: 'btn danger', type: 'button', text: '退会を記録する', on: { click: function () { withdraw(s, again); } } })]));
+      h('button', { class: 'btn primary', type: 'button', text: '＋ 入会（クラスに入る）', on: { click: function () { enroll(s, again); } } })]));
     var tl = A.enrollmentTimeline(d.enrollments, ref.classes, ref.courses, today());
     var box = h('div', { class: 'timeline' });
     if (!tl.length) box.appendChild(h('p', { class: 'empty', text: 'まだ在籍はありません。「入会」から入れてください' }));
@@ -125,10 +127,12 @@
     });
     body.appendChild(box);
 
-    // 退会
+    // 退会（「入会」のすぐ隣に置かない・在籍の欄の下に離す・U-23）
     var ws = A.withdrawalRows(d.withdrawals);
+    body.appendChild(h('h2', { class: 'section-title', text: '退会' }));
+    body.appendChild(h('div', { class: 'toolbar np' }, [
+      h('button', { class: 'btn danger', type: 'button', text: '退会を記録する', on: { click: function () { withdraw(s, again); } } })]));
     if (ws.length) {
-      body.appendChild(h('h2', { class: 'section-title', text: '退会の記録' }));
       ws.forEach(function (w) {
         body.appendChild(h('div', { class: 'list-row' + (w.active ? '' : ' off') }, [
           h('div', { class: 'main' }, [w.text, w.state ? h('span', { class: 'tag', text: w.state }) : null]),
@@ -194,15 +198,22 @@
             return { el: h('label', { class: 'field' }, [h('span', { text: '確かめのため、生徒の名前「' + s.name + '」をそのまま入れてください' }), input]),
               valid: function () { return A.sameName(input.value, s.name); }, collect: function () { return { nameTyped: input.value }; } };
           },
-          onDone: function () { ui.toast('完全に削除しました'); state.studentId = ''; render(view); } });
+          onDone: function () { ui.toast('完全に削除しました'); state.studentId = ''; render(view); },
+          // 応答が途中で失われて同じ受付番号で送り直すと、消えた後なので「生徒がいません」が返る（04a 小11）
+          onConfirmError: function (d) {
+            if (!/生徒がいません/.test(core.messageFor(d))) return false;
+            ui.toast('削除は済んでいる可能性があります。生徒の一覧で確かめてください', 'warn');
+            state.studentId = ''; render(view);
+            return true;
+          } });
       } });
   }
 
   /* ---------- 在籍の操作（S1-32） ---------- */
 
-  var LABEL = { move: '移動', pause: '休止', end: '1クラス終了', resume: '復帰', confirm: '予定を確定', correct: '訂正' };
+  var LABEL = { move: '移動', pause: '休止', end: '1クラス終了', resume: '復帰', confirm: '予定を確定', cancel_plan: '予定を取り消す', correct: '訂正' };
   function actionButton(a, e, s, again) {
-    var fn = { move: move, pause: pause, end: endClass, resume: resume, confirm: confirmPlanned, correct: correct }[a];
+    var fn = { move: move, pause: pause, end: endClass, resume: resume, confirm: confirmPlanned, cancel_plan: cancelPlanned, correct: correct }[a];
     return h('button', { class: 'btn small', type: 'button', text: LABEL[a], on: { click: function () { fn(e, s, again); } } });
   }
   var FIXED = { key: 'fixed', label: '確定か予定か', type: 'radio', value: 'confirmed',
@@ -263,13 +274,21 @@
         m.close();
         ui.confirmThen('1クラス終了の確認', [cname(e.class_id) + ' は ' + core.fmtMonth(args.month) + ' で終わりです',
           'その後の予定の在籍は取り消します', '使っていない振替券は ' + core.fmtMonth(args.month) + ' の末日まで使えます', 'この操作は「訂正」で直せますが、自動では戻りません'],
-        '終了する', function (b2, m2) { ui.write('end_class', args, { button: b2, onDone: ui.closing(m2, again) }); });
+        '終了する', function (b2, m2) { ui.write('end_class', args, { button: b2, onDone: ui.closing(m2, again) }); }, m);   // ◀ 入力に戻る（直し第4弾 1(a)）
       } });
   }
 
   function confirmPlanned(e, s, again) {
     ui.confirmThen('予定を確定しますか', [cname(e.class_id) + '（' + core.fmtMonth(e.from_month) + 'から）の予定を確定します'], '確定する',
       function (okBtn, m) { ui.write('enrollment.confirm', { enrollmentId: e.id }, { button: okBtn, onDone: ui.closing(m, again) }); });
+  }
+
+  /** 予定の在籍の取消（enrollment.cancel_plan・理由必須・サーバーの確認画面つき） */
+  function cancelPlanned(e, s, again) {
+    ui.formModal({ title: '予定を取り消す', intro: cname(e.class_id) + '（' + core.fmtMonth(e.from_month) + 'から）の予定を取り消します。前の在籍はそのまま続きます', okLabel: '影響を確かめる',
+      fields: [{ key: 'reason', label: '取り消す理由', type: 'text', value: '' }],
+      check: function (v) { return v.reason.trim() ? { args: { enrollmentId: e.id, reason: v.reason.trim() } } : { error: '取り消す理由を入れてください' }; },
+      onOk: function (args, okBtn, m) { ui.write('enrollment.cancel_plan', args, { button: okBtn, title: '予定の取消', names: names(s), okLabel: '取り消す', onDone: ui.closing(m, again) }); } });
   }
 
   function correct(e, s, again) {
@@ -285,10 +304,10 @@
 
   function withdraw(s, again) {
     ui.formModal({ title: '退会', okLabel: '影響を確かめる', danger: true,
-      intro: '退会は「この月から来ない」月を選びます。次の画面で、終わる在籍・取り消す予約・券を確かめてから確定します',
-      fields: [{ key: 'applyMonth', label: '何月から来ないか（退会の月）', type: 'select', options: months(2, 12), value: core.addMonths(today().slice(0, 7), 1) },
+      intro: '退会は「最後に来る月」を選びます（1クラス終了と同じ）。次の画面で、終わる在籍・取り消す予約・券を確かめてから確定します',
+      fields: [{ key: 'lastMonth', label: '最後に来る月', type: 'select', options: months(2, 12), value: today().slice(0, 7) },
         { key: 'receivedOn', label: '退会の連絡を受けた日', type: 'date', value: today() }],
-      check: function (v) { return { args: { studentId: s.id, applyMonth: v.applyMonth, receivedOn: v.receivedOn || undefined } }; },
+      check: function (v) { return { args: { studentId: s.id, lastMonth: v.lastMonth, receivedOn: v.receivedOn || undefined } }; },
       onOk: function (args, okBtn, m) {
         ui.write('withdraw', args, { button: okBtn, title: '退会の影響', names: names(s), reasonLabel: '退会の理由（分かれば）', okLabel: '退会を確定する', danger: true,
           onDone: ui.closing(m, function () { ui.toast('退会を記録しました。「連絡が要る人」も確かめてください'); again(); }) });

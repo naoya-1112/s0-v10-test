@@ -65,12 +65,39 @@
           };
         });
         return { session_id: s.session_id, kind: s.kind, title: sessionTitle(s), course: s.course_name || '', teacher: s.teacher || '',
-          rows: rows, counts: counts,
+          rows: rows, counts: counts, plannedNote: plannedNote(s.planned),
           summary: '出席予定 ' + (counts.expected + counts.makeup_in) + '人（うち振替で来る ' + counts.makeup_in + '人）・欠席連絡 ' + counts.absent +
             '人・振替で他へ ' + counts.makeup_out + '人／記録済み ' + counts.recorded + '人' };
       })
     };
   }
+
+  /**
+   * 講師画面・当日名簿の見出し（04b U-01）: 今日なら「今日のクラス」、ほかの日は「10月3日（土）のクラス」と色付きの帯の文。
+   * kind: 'teacher'（のクラス）／'roster'（の名簿）
+   */
+  function dayHeading(date, today, kind) {
+    var tail = kind === 'roster' ? 'の名簿' : 'のクラス';
+    if (date === today) return { title: '今日' + tail, alert: '' };
+    var past = date < today;
+    return { title: core.fmtDate(date) + tail,
+      alert: '今日ではありません（' + core.fmtDate(date) + (past ? '・過ぎた日' : '・先の日') + 'を表示中）。今日に戻すには「今日」を押してください' };
+  }
+
+  /** 出欠を押した瞬間の表示（尚哉 10/4③・U-02）: teacher.day の1回分の写しで、その生徒の出欠だけ変える（result が '' なら未記録） */
+  function withAttendance(session, studentId, result) {
+    var s = JSON.parse(JSON.stringify(session || {}));
+    (s.students || []).forEach(function (p) { if (p.student_id === studentId) p.attendance = result || ''; });
+    return s;
+  }
+  /** 1回分の写し → その回の講師画面の形（行・まとめの文）。date は見出しに使わないので空でよい */
+  /** 移動・復帰の予定（まだ確定していない）の人: 枠・人数に入れず、別に1行で書く（尚哉 10/4・S7）。いなければ '' */
+  function plannedNote(list) {
+    var names = (list || []).map(function (p) { return p.name + 'さん'; });
+    return names.length ? '移動・復帰の予定（まだ確定していません・人数に入れていません）: ' + names.join('、') : '';
+  }
+
+  function sessionView(session) { return teacherDayView({ date: '', sessions: [session] }).sessions[0]; }
 
   /** 当日名簿（出欠簿・8-1）: teacher.day の応答 → 印刷用の表（予定・出欠欄。未記録は空欄） */
   function dayRosterView(day) {
@@ -79,7 +106,7 @@
       title: tv.dateLabel + ' の名簿',
       empty: tv.empty,
       sessions: tv.sessions.map(function (s) {
-        return { title: s.title, course: s.course, teacher: s.teacher, summary: s.summary,
+        return { title: s.title, course: s.course, teacher: s.teacher, summary: s.summary, plannedNote: s.plannedNote,
           rows: s.rows.map(function (r, i) {
             return { no: i + 1, name: r.name, kana: r.kana, plan: r.statusLabel, memo: r.notes.join('／'),
               attendance: r.attendance ? r.attendanceLabel : '' };
@@ -99,7 +126,7 @@
     return { text: t, cls: r === 'absent' ? 'c-abs' : '' };
   }
 
-  /** roster.month の応答 → クラス別の名簿（予定は印）と出欠簿（回×生徒） */
+  /** roster.month の応答 → クラス別の名簿と出欠簿（回×生徒）。予定の人は表に入れず plannedNote に別に書く */
   function rosterMonthView(data) {
     var classes = (data && data.classes) || [];
     return {
@@ -110,13 +137,13 @@
           title: c.label + (c.course_name ? '（' + c.course_name + '）' : ''),
           teacher: c.teacher,
           count: c.students.filter(function (p) { return !p.planned; }).length,
-          planned: c.students.filter(function (p) { return p.planned; }).length,
+          plannedNote: plannedNote(c.students.filter(function (p) { return p.planned; })),
           heads: c.sessions.map(function (s) {
             var d = String(s.date).split('-');
             return (+d[1]) + '/' + (+d[2]) + (s.number ? ' 第' + s.number + '回' : '') + (s.status === 'canceled' ? ' 中止' : '');
           }),
-          rows: c.students.map(function (p, i) {
-            return { no: i + 1, name: p.name + (p.planned ? '（予定）' : ''), kana: p.kana, planned: p.planned,
+          rows: c.students.filter(function (p) { return !p.planned; }).map(function (p, i) {
+            return { no: i + 1, name: p.name, kana: p.kana,
               cells: c.sessions.map(function (s) { return s.status === 'canceled' ? { text: '—', cls: '' } : bookCell((c.cells[p.student_id] || {})[s.id]); }) };
           })
         };
@@ -146,7 +173,13 @@
     });
   }
 
-  var views = { teacherDayView: teacherDayView, dayRosterView: dayRosterView, rosterMonthView: rosterMonthView, bookCell: bookCell,
+  /** 変更履歴の「変わった所」1つ → 「開始の月: 10月 → 11月」（列名・状態・記号を日本語と名前に。U-18）。maps は core.nameMaps の結果 */
+  function changeText(c, maps) {
+    var v = function (x) { return x ? core.humanize(x, maps) : '（空）'; };
+    return core.fieldLabel(c.key) + ': ' + v(c.before) + ' → ' + v(c.after);
+  }
+
+  var views = { plannedNote: plannedNote, changeText: changeText, dayHeading: dayHeading, withAttendance: withAttendance, sessionView: sessionView, teacherDayView: teacherDayView, dayRosterView: dayRosterView, rosterMonthView: rosterMonthView, bookCell: bookCell,
     historyView: historyView, buttonsFor: buttonsFor, RESULT_LABEL: RESULT_LABEL };
   if (typeof module !== 'undefined' && module.exports) module.exports = views;
   else { root.App = root.App || {}; root.App.views = views; }
