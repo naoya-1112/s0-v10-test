@@ -108,11 +108,13 @@
       { id: 'notes', label: 'カルテ' },
       { id: 'history', label: '変更履歴' },
       { id: 'courses', label: 'コース' },
-      { id: 'settings', label: '設定' }
+      { id: 'settings', label: '設定' },
+      { id: 'requests', label: '要望' }
     ],
     teacher: [
       { id: 'teacher', label: '今日のクラス' },
-      { id: 'dayroster', label: '当日名簿' }
+      { id: 'dayroster', label: '当日名簿' },
+      { id: 'requests', label: '要望' }
     ]
   };
   function routesFor(role) { return ROUTES[role] || []; }

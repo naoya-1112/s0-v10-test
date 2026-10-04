@@ -18,7 +18,7 @@
       if (!d) { body.textContent = '読み込めませんでした'; return; }
       O.homeCards(d.counts).forEach(function (c) {
         body.appendChild(h('div', { class: 'card' + (c.alert ? ' alert' : '') }, [
-          h('h2', {}, [c.label + '　', h('strong', { class: 'count', text: String(c.count) }), ' ' + c.unit]),
+          h('h2', {}, [h('span', { class: 'count-label', text: c.label + '　' }), h('span', { class: 'count-line' }, [h('strong', { class: 'count', text: String(c.count) }), ' ' + c.unit])]),   // 見た目: 小さなラベル＋大きな数字（PR Hub 風・文言は同じ）
           c.note ? h('p', { class: 'sub', text: c.note }) : null,
           h('button', { class: 'btn' + (c.alert ? ' primary' : ''), type: 'button', text: '開く', on: { click: function () { App.go(c.route); } } })]));
       });

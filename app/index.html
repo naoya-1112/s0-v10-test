@@ -12,18 +12,29 @@
 <link id="page-landscape" rel="stylesheet" href="css/print-landscape.css" media="not all">
 </head>
 <body>
+<!-- 見た目は PR Hub 風（尚哉 10/4）: 左の濃紺のサイドバー＋上の白い帯＋薄いグレーの本文。狭い画面ではサイドバーを畳み、上の帯のメニューボタンで開く（app.js） -->
+<aside id="side" class="side np" aria-label="メニュー">
+  <div class="side-brand"><span class="logo" aria-hidden="true">金</span><span class="side-name">金木犀舎 名簿</span></div>
+  <nav id="nav" class="nav np" aria-label="画面の切り替え"></nav>
+  <div class="side-foot">金木犀舎 名簿</div>
+</aside>
+<div id="side-back" class="side-back np" hidden></div>
+
+<div class="frame">
 <header class="topbar np">
-  <div class="brand">金木犀舎 名簿</div>
+  <button id="menu" class="menu-btn" type="button" aria-label="メニューを開く" aria-controls="side" aria-expanded="false"><span class="ic-menu" aria-hidden="true"></span></button>
+  <div class="crumb"><span class="ic-home" aria-hidden="true"></span><span class="crumb-sep" aria-hidden="true">›</span><span id="crumb" class="crumb-now">金木犀舎 名簿</span></div>
   <div class="who-box">
+    <span id="avatar" class="avatar" aria-hidden="true" hidden></span>
     <span id="who"></span>
     <span class="who-gap"></span>
     <button id="logout" class="btn small logout" type="button" hidden>ログアウト</button>
   </div>
 </header>
 <div id="banner" class="banner np" hidden></div>
-<nav id="nav" class="nav np" aria-label="画面の切り替え"></nav>
 
 <section id="login" class="login np" hidden>
+  <div class="login-brand"><span class="logo" aria-hidden="true">金</span><span>金木犀舎 名簿</span></div>
   <h1>ログイン</h1>
   <p>「Googleでログイン」を押して、教室に登録したGoogleアカウントを選んでください。</p>
   <p id="login-reason" class="login-reason" role="alert" hidden></p>
@@ -32,6 +43,7 @@
 </section>
 
 <main id="view"></main>
+</div>
 
 <div id="modal" class="modal np" hidden></div>
 <div id="toast" class="toast np" role="status" aria-live="polite"></div>
@@ -53,6 +65,7 @@
 <script src="js/student.js"></script>
 <script src="js/schedule.js"></script>
 <script src="js/contact.js"></script>
+<script src="js/request.js"></script>
 <script src="js/course.js"></script>
 <script src="js/settings.js"></script>
 <script src="js/makeup.js"></script>

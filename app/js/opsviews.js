@@ -314,7 +314,8 @@
       { key: 'contact', label: '連絡が要る人', count: n('contacts'), route: 'contacts', unit: '件', alert: n('contacts') > 0, note: '' },
       { key: 'calendar', label: 'カレンダー反映の失敗', count: n('calendar_failed'), route: 'settings', unit: '件', alert: n('calendar_failed') > 0,
         note: (n('calendar_failed') ? '設定の「もう一度反映」で直します' : '') + (n('calendar_pending') ? (n('calendar_failed') ? '／' : '') + '反映待ち ' + n('calendar_pending') + ' 件' : '') },
-      { key: 'continuation', label: '継続確認（まだ結論なし）', count: n('continuation'), route: 'continuation', unit: '人', alert: n('continuation') > 0, note: '' }
+      { key: 'continuation', label: '継続確認（まだ結論なし）', count: n('continuation'), route: 'continuation', unit: '人', alert: n('continuation') > 0, note: '' },
+      { key: 'requests', label: '新しい要望（受付のまま）', count: n('requests_new'), route: 'requests', unit: '件', alert: n('requests_new') > 0, note: '' }
     ];
   }
 
