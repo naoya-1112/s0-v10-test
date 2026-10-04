@@ -8,7 +8,7 @@
 
   function render(view0) {
     var view = ui.stage(view0);   // 出し直しの間も今の画面を出したまま（尚哉 10/4①）
-    view.appendChild(h('h1', { text: '設定' }));
+    ui.page(view, { title: '設定' });
     var again = function () { render(view0); };
     var secS = h('div', { class: 'loading', text: '読み込み中…' }), secA = h('div', {}), secC = h('div', {});
     view.appendChild(h('h2', { class: 'section-title', text: '教室の設定' }));
@@ -20,6 +20,7 @@
     // ふだんは使わないので「困ったとき（管理者向け）」の折りたたみの中に入れる（U-30）
     var fold = h('div', {});
     view.appendChild(h('details', { class: 'admin-fold np' }, [h('summary', { text: '困ったとき（管理者向け） ▾' }), fold]));
+    ui.sections(view);   // 教室の設定・アカウント・カレンダーをそれぞれ白いカードに
     fold.appendChild(h('h2', { class: 'section-title', text: '版を戻した後の「削除の再確認」' }));
     fold.appendChild(h('p', { class: 'sub', text: 'スプレッドシートの版を戻した後に1回だけ押します。完全削除した生徒が戻っていれば消し直し、発行し直したリンクが戻っていれば「再発行が要る」に出します。ふだんは押さなくて大丈夫です' }));
     fold.appendChild(h('div', { class: 'toolbar' }, [h('button', { class: 'btn', type: 'button', text: '削除の再確認をする', on: { click: function () {

@@ -10,15 +10,16 @@
   function render(view) {
     var view0 = view;
     view = ui.stage(view0);
-    view.appendChild(h('h1', { text: '連絡が要る人' }));
+    ui.page(view, { title: '連絡が要る人' });
     var all = h('input', { type: 'checkbox', class: 'check' });
     all.checked = state.all;
     all.addEventListener('change', function () { state.all = all.checked; render(view0); });
     view.appendChild(h('div', { class: 'toolbar np' }, [h('label', { class: 'choice' }, [all, ' 連絡済みも見る']), ui.printButton()]));
-    var body = h('div', { class: 'loading', text: '読み込み中…' });
+    var body = h('div', { class: 'loading card sec', text: '読み込み中…' });
     view.appendChild(body);
+    ui.sections(view);
     Promise.all([ui.read('contact.list', { all: state.all }), ui.read('session.list', {}), ui.read('student.list', { includeHidden: true }), ui.read('class.list', {})]).then(function (r) {
-      ui.clear(body); body.className = 'print-area';
+      ui.clear(body); body.className = 'print-area card sec';
       if (!r[0]) { body.textContent = '読み込めませんでした'; return; }
       var rows = A.contactRows(r[0].contacts, (r[1] && r[1].sessions) || [], (r[2] && r[2].students) || [], (r[3] && r[3].classes) || []);
       body.appendChild(h('p', { class: 'sub', text: (state.all ? '全部で ' : 'まだ連絡していない人 ') + rows.length + ' 件' }));

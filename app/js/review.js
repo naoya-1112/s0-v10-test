@@ -28,17 +28,16 @@
   function render(view0) {
     if (state.receiptId) { renderReceipt(view0); return; }
     var view = ui.stage(view0);   // 読み込みの間も今の画面を出したまま（尚哉 10/4①）
-    view.appendChild(h('h1', { text: '要確認' }));
-    view.appendChild(h('p', { class: 'sub', text: 'ここにあるものは、解決するまでその券・生徒・回の新しい予約を止めています。上から順に片付けてください' }));
-    var body = h('div', {});
+    ui.page(view, { title: '要確認', desc: 'ここにあるものは、解決するまでその券・生徒・回の新しい予約を止めています。上から順に片付けてください' });
+    var body = h('div', {});   // 1件ずつ白いカード（グレーの上に並ぶ）
     view.appendChild(body);
     loadRef(ui.read('review.list', {})).then(function (d) {
       if (!d) { body.textContent = '読み込めませんでした'; return; }
       var rows = O.reviewRows(d.items, ref.names, ref.sessions, ref.classes);
       // 止まった操作を先に（他の操作を止めているため）
       rows.sort(function (a, b) { return (a.source === 'receipt' ? 0 : 1) - (b.source === 'receipt' ? 0 : 1); });
-      body.appendChild(h('p', { class: 'sub', text: rows.length + ' 件' }));
-      if (!rows.length) { body.appendChild(h('p', { class: 'empty', text: '要確認はありません' })); return; }
+      body.appendChild(h('p', { class: 'card-count', text: rows.length + ' 件' }));
+      if (!rows.length) { ui.card(body, [h('p', { class: 'empty', text: '要確認はありません' })]); return; }
       rows.forEach(function (r) {
         var acts = r.source === 'receipt'
           ? [h('button', { class: 'btn primary', type: 'button', text: '調べる・直す', on: { click: function () { state.receiptId = r.receipt_id; render(view0); } } })]
@@ -64,14 +63,14 @@
 
   function renderReceipt(view0) {
     var view = ui.stage(view0), rid = state.receiptId, again = function () { render(view0); };
-    view.appendChild(h('div', { class: 'toolbar np' }, [h('button', { class: 'btn', type: 'button', text: '◀ 要確認の一覧へ', on: { click: function () { state.receiptId = ''; render(view0); } } })]));
+    view.appendChild(h('div', { class: 'toolbar np page-back' }, [h('button', { class: 'btn', type: 'button', text: '◀ 要確認の一覧へ', on: { click: function () { state.receiptId = ''; render(view0); } } })]));
     var body = h('div', {});
     view.appendChild(body);
     loadRef(ui.read('receipt.inspect', { receiptId: rid })).then(function (d) {
       if (!d) { body.textContent = '読み込めませんでした'; return; }
       var v = O.inspectView(d), adv = O.closeAdvice(v);
       var who = (d.student_ids || []).map(function (x) { return ref.names[x] || x; }).join('・');
-      body.appendChild(h('h1', { text: '途中で止まった操作' }));
+      ui.page(body, { title: '途中で止まった操作' });
       body.appendChild(h('p', {}, ['操作: ' + v.opText + '　受け付けた時刻 ' + v.at]));
       body.appendChild(h('p', {}, ['対象: ', h('strong', { text: who || '（生徒なし）' }), '　' + (d.session_ids || []).map(function (x) {
         return O.sesLabel(ref.sessions.filter(function (s) { return s.id === x; })[0], ref.classes); }).join('／')]));
@@ -97,7 +96,7 @@
       var probs = h('div', { role: 'alert' });
       body.appendChild(h('div', { class: 'toolbar np' }, [h('button', { class: 'btn primary', type: 'button', text: '受付を閉じる', on: { click: function () { close(rid, adv, probs, function () { state.receiptId = ''; render(view0); }); } } })]));
       body.appendChild(probs);
-    });
+    }).then(function () { ui.sections(body); });   // 見出しはグレーの上・1〜3の節ごとに白いカード
   }
 
   /** 表の1行の「誰の・どの回の」: その受付の対象の生徒と回（記号でなく名前）。1件も分からなければ記号を表の名前にして出す */

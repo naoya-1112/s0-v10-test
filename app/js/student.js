@@ -30,20 +30,21 @@
 
   function renderList(view0) {
     var view = ui.stage(view0);   // 出し直しの間も今の画面を出したまま（尚哉 10/4①）
-    view.appendChild(h('h1', { text: '生徒' }));
     var q = h('input', { type: 'search', class: 'input', placeholder: '名前・ふりがなの一部', value: state.q, 'aria-label': '名前で探す' });
     var hid = h('input', { type: 'checkbox', class: 'check' });
     hid.checked = state.hidden;
     var add = h('button', { class: 'btn primary', type: 'button', text: '＋ 新しい生徒を登録', on: { click: function () { editStudent(view0, null); } } });
     var list = h('div', { class: 'loading', text: '読み込み中…' });
-    view.appendChild(h('div', { class: 'toolbar np' }, [h('label', { class: 'field inline' }, [h('span', { text: '名前で探す' }), q]),
-      h('label', { class: 'choice' }, [hid, ' 非表示の生徒も見る']), add]));
-    view.appendChild(list);
+    ui.page(view, { title: '生徒', actions: [add] });
+    ui.card(view, [h('div', { class: 'toolbar' }, [h('label', { class: 'field inline' }, [h('span', { text: '名前で探す' }), q]),
+      h('label', { class: 'choice' }, [hid, ' 非表示の生徒も見る'])])], { cls: 'filters np' });
+    var count = ui.cardCount(view, '');
+    ui.card(view, [list]);
     var data = [];
     var draw = function () {
       ui.clear(list); list.className = '';
       var rows = A.filterStudents(data, state.q);
-      list.appendChild(h('p', { class: 'sub', text: rows.length + ' 人' }));
+      count.textContent = rows.length + ' 人';   // 件数は一覧のカードの上に小さく
       if (!rows.length) { list.appendChild(h('p', { class: 'empty', text: '当てはまる生徒はいません' })); return; }
       rows.forEach(function (s) {
         list.appendChild(h('div', { class: 'list-row' + (s.hidden ? ' off' : '') }, [
@@ -82,7 +83,7 @@
     if (!state.studentId) { renderList(view0); return; }
     var view = ui.stage(view0);   // 出し直しの間も今の画面を出したまま（尚哉 10/4①）
     var back = h('button', { class: 'btn np', type: 'button', text: '◀ 生徒の一覧へ', on: { click: function () { state.studentId = ''; render(view0); } } });
-    view.appendChild(h('div', { class: 'toolbar np' }, [back]));
+    view.appendChild(h('div', { class: 'toolbar np page-back' }, [back]));
     var body = h('div', { class: 'loading', text: '読み込み中…' });
     view.appendChild(body);
     Promise.all([ui.read('student.get', { studentId: state.studentId }), loadRef()]).then(function (r) {
@@ -90,12 +91,13 @@
       ui.clear(body); body.className = '';
       if (!d) { body.textContent = '読み込めませんでした'; return; }
       detail(view0, body, d);
+      ui.sections(body);   // 見出しはグレーの上・節（基本情報・在籍…）ごとに白いカード
     });
   }
 
   function detail(view, body, d) {
     var s = d.student, again = function () { render(view); };
-    body.appendChild(h('h1', {}, [s.name, h('span', { class: 'kana', text: '　' + s.kana }), s.hidden ? h('span', { class: 'tag', text: '非表示' }) : null]));
+    ui.page(body, { title: [s.name, h('span', { class: 'kana', text: '　' + s.kana }), s.hidden ? h('span', { class: 'tag', text: '非表示' }) : null] });
     // 基本情報
     var info = h('table', { class: 'grid' }, h('tbody', {}, A.STUDENT_FIELDS.filter(function (f) { return f.key !== 'name' && f.key !== 'kana'; }).map(function (f) {
       return h('tr', {}, [h('th', { text: f.label }), h('td', { text: A.studentFieldText(f, s[f.key], core.fmtDate) })]);

@@ -17,8 +17,7 @@
   function render(view) {
     var view0 = view;
     view = ui.stage(view0);
-    view.appendChild(h('h1', { text: '要望' }));
-    view.appendChild(h('p', { class: 'sub', text: 'こうなったら使いやすい、ここが分かりにくい、などを自由に書いてください。誰でも書けます。' }));
+    ui.page(view, { title: '要望', desc: 'こうなったら使いやすい、ここが分かりにくい、などを自由に書いてください。誰でも書けます。' });
     var f = ui.form([
       { key: 'body', label: '要望', type: 'textarea', rows: 4 },
       { key: 'screen', label: 'どの画面の話ですか（任意）', type: 'select',
@@ -34,6 +33,7 @@
     view.appendChild(h('h2', { text: 'これまでの要望' }));
     var body = h('div', { class: 'loading', text: '読み込み中…' });
     view.appendChild(body);
+    ui.sections(view);   // 書く欄・これまでの要望をそれぞれ白いカードに
     ui.read('request.list', {}).then(function (d) {
       ui.clear(body); body.className = '';
       if (!d) { body.textContent = '読み込めませんでした'; return; }

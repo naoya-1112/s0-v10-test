@@ -16,7 +16,16 @@
   function showWho() {
     var who = App.session.who();
     var w = el('who');
-    if (w) w.textContent = who ? 'ログイン中: ' + who.name + (who.role === 'staff' ? '（スタッフ）' : '（講師）') : '';
+    // 上の帯の右: 名前（上）と役割（下）の2段（PR Hub 風 2回目）。「ログイン中:」は読み上げ用に残す
+    if (w) {
+      w.textContent = '';
+      if (who) {
+        var h = App.ui.h;
+        w.appendChild(h('span', { class: 'sr', text: 'ログイン中: ' }));
+        w.appendChild(h('span', { class: 'who-name', text: who.name }));
+        w.appendChild(h('span', { class: 'who-role', text: who.role === 'staff' ? 'スタッフ' : '講師' }));
+      }
+    }
     var out = el('logout');
     if (out) out.hidden = !who;
   }

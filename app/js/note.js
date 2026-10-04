@@ -11,12 +11,13 @@
     var f = App.takeFocus ? App.takeFocus() : '';
     if (f) state.studentId = f;
     App.ui.clear(view);
-    view.appendChild(h('h1', { text: 'カルテ' }));
-    var list = h('div', {});
+    App.ui.page(view, { title: 'カルテ' });
+    var list = h('div', { class: 'card sec' });
     // 生徒は名前・ふりがなで探して選ぶ（生徒の画面と同じ探し方・U-22）
     var pick = App.ui.studentPicker({ value: state.studentId, onChange: function (id) { state.studentId = id; load(view, list); } });
     view.appendChild(h('div', { class: 'toolbar np' }, [pick.el]));
     view.appendChild(list);
+    App.ui.sections(view);
     App.ui.read('student.list', {}).then(function (d) {
       if (!d) return;
       pick.setStudents(d.students);

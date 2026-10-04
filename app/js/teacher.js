@@ -15,7 +15,7 @@
     if (!state.date) state.date = today;
     var out = App.ui.stage(view);   // 出し直しの間も今の画面を出したまま（尚哉 10/4①）
     var hd = V.dayHeading(state.date, today, 'teacher');
-    out.appendChild(h('h1', { text: hd.title }));
+    App.ui.page(out, { title: hd.title });
     if (hd.alert) out.appendChild(h('div', { class: 'date-alert', role: 'alert', text: hd.alert }));
     out.appendChild(App.ui.stepper(core.fmtDate(state.date) + (state.date === today ? '（今日）' : ''),
       function () { state.date = core.addDays(state.date, -1); render(view); },
@@ -24,8 +24,9 @@
     var future = state.date > today;
     if (future) out.appendChild(h('p', { class: 'hint', text: '先の日付の出欠は付けられません（見るだけ）' }));
     else out.appendChild(paperBox());
-    var body = h('div', { class: 'loading', text: '読み込み中…' });
+    var body = h('div', { class: 'loading bare', text: '読み込み中…' });   // クラスごとのカードがグレーの上に並ぶ
     out.appendChild(body);
+    App.ui.sections(out);   // 日付の切り替え・紙の出欠を1枚のカードに
     App.ui.read('teacher.day', { date: state.date }).then(function (d) {
       if (!d) { body.textContent = '読み込めませんでした'; return; }
       fill(view, body, d, future);
@@ -46,7 +47,7 @@
     App.ui.clear(body);
     body.className = '';
     var sessions = (day && day.sessions) || [];
-    if (!sessions.length) { body.appendChild(h('p', { class: 'empty', text: 'この日のクラスはありません' })); return; }
+    if (!sessions.length) { App.ui.card(body, [h('p', { class: 'empty', text: 'この日のクラスはありません' })]); return; }
     sessions.forEach(function (raw) {
       var c = { raw: raw, sv: V.sessionView(raw), summary: h('p', { class: 'summary' }), rows: {} };
       c.summary.textContent = c.sv.summary;

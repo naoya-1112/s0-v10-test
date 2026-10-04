@@ -11,8 +11,7 @@
 
   function render(view0) {
     var view = ui.stage(view0);   // 出し直しの間も今の画面を出したまま（尚哉 10/4①）
-    view.appendChild(h('h1', { text: '継続確認' }));
-    view.appendChild(h('p', { class: 'sub', text: 'クラスが終わる月の1日から、ここに出ます。結論を入れるまで消えません。退会の人は生徒の画面の「退会を記録する」を使ってください' }));
+    ui.page(view, { title: '継続確認', desc: 'クラスが終わる月の1日から、ここに出ます。結論を入れるまで消えません。退会の人は生徒の画面の「退会を記録する」を使ってください' });
     var body = h('div', { class: 'loading', text: '読み込み中…' });
     view.appendChild(body);
     Promise.all([ui.read('continuation.rows', {}), ui.read('class.list', {}), ui.read('course.list', {}), ui.read('student.list', { includeHidden: true })]).then(function (r) {
@@ -36,6 +35,7 @@
       if (!v.paused.length) body.appendChild(h('p', { class: 'empty', text: '休止中の人はいません' }));
       v.paused.forEach(function (p) { body.appendChild(h('div', { class: 'list-row off' }, [h('div', { class: 'main' }, [h('strong', { text: p.name }), '　' + p.cls + '　' + p.period])])); });
       rollover(body, again);
+      ui.sections(body);   // 結論待ち・休止中・一括移行をそれぞれ白いカードに
     });
   }
 

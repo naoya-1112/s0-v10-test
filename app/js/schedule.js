@@ -23,7 +23,7 @@
 
   function render(view0) {
     var view = ui.stage(view0);   // 出し直しの間も今の画面を出したまま（尚哉 10/4①）
-    view.appendChild(h('h1', { text: 'クラスと日程' }));
+    ui.page(view, { title: 'クラスと日程' });
     var body = h('div', { class: 'loading', text: '読み込み中…' });
     view.appendChild(body);
     load().then(function (ok) {
@@ -67,8 +67,9 @@
     });
 
     // 開講日一覧（クラス）または月の日程（クラスなしの振替Day・体験なども）
-    var listBox = h('div', {});
+    var listBox = h('div', { class: 'card sec' });   // 開講日一覧・月の日程は1枚のカード（中身はあとから入る）
     body.appendChild(listBox);
+    ui.sections(body);   // 期の選択・期のクラスをそれぞれ白いカードに
     if (state.classId) sessionsOfClass(listBox, again);
     else sessionsOfMonth(listBox, again);
   }

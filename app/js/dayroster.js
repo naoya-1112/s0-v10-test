@@ -11,7 +11,7 @@
     if (!state.date) state.date = core.todayJst();
     var view = App.ui.stage(view0);   // 出し直しの間も今の画面を出したまま（尚哉 10/4①）
     var hd = V.dayHeading(state.date, core.todayJst(), 'roster');
-    view.appendChild(h('h1', { class: 'np', text: hd.title === '今日の名簿' ? '当日名簿' : hd.title }));
+    App.ui.page(view, { title: hd.title === '今日の名簿' ? '当日名簿' : hd.title, np: true });
     if (hd.alert) view.appendChild(h('div', { class: 'date-alert np', role: 'alert', text: hd.alert }));
     var pick = h('input', { type: 'date', class: 'input', value: state.date, 'aria-label': '日付' });
     pick.addEventListener('change', function () { if (pick.value) { state.date = pick.value; render(view0); } });
@@ -20,10 +20,11 @@
       function () { state.date = core.todayJst(); render(view0); },
       function () { state.date = core.addDays(state.date, 1); render(view0); }));
     view.appendChild(h('div', { class: 'toolbar np' }, [pick, App.ui.printButton()]));
-    var body = h('div', { class: 'loading', text: '読み込み中…' });
+    var body = h('div', { class: 'loading card sec', text: '読み込み中…' });
     view.appendChild(body);
+    App.ui.sections(view);
     App.ui.read('teacher.day', { date: state.date }).then(function (d) {
-      App.ui.clear(body); body.className = 'print-area';
+      App.ui.clear(body); body.className = 'print-area card sec';
       if (!d) { body.textContent = '読み込めませんでした'; return; }
       var rv = V.dayRosterView(d);
       body.appendChild(h('h2', { class: 'print-title', text: rv.title }));

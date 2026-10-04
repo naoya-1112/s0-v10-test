@@ -22,7 +22,7 @@
     var f = App.takeFocus ? App.takeFocus() : '';
     if (f) state.studentId = f;
     var view = ui.stage(view0);   // 出し直しの間も今の画面を出したまま（尚哉 10/4①）
-    view.appendChild(h('h1', { text: '振替・欠席' }));
+    ui.page(view, { title: '振替・欠席' });
     var people = h('div', {});
     var list = h('div', { class: 'loading', text: '読み込み中…' });
     view.appendChild(h('h2', { class: 'section-title', text: '生徒を選んで代行する（欠席連絡・振替・振替Day）' }));
@@ -33,6 +33,7 @@
     view.appendChild(h('h2', { class: 'section-title', text: state.all ? '振替の一覧（取り消したもの・過去も）' : 'これからの振替' }));
     view.appendChild(h('div', { class: 'toolbar np' }, [h('label', { class: 'choice' }, [all, ' 取り消したもの・過去も見る']), ui.printButton()]));
     view.appendChild(list);
+    ui.sections(view);   // 代行・振替の一覧をそれぞれ白いカードに
     // 共通の一覧と振替の一覧を並べて1回で読む（U-21）
     Promise.all([loadRef(), ui.read('makeup.list', { all: state.all })]).then(function (rr) {
       studentBox(view0, people);

@@ -9,12 +9,11 @@
 
   function render(view0) {
     var view = ui.stage(view0);   // 出し直しの間も今の画面を出したまま（尚哉 10/4①）
-    view.appendChild(h('h1', { text: 'コース' }));
     var again = function () { render(view0); };
     var list = h('div', { class: 'loading', text: '読み込み中…' });
-    view.appendChild(h('div', { class: 'toolbar' }, [h('button', { class: 'btn primary', type: 'button', text: '＋ コースを足す', on: { click: function () { edit(null, [], again); } } })]));
-    view.appendChild(h('p', { class: 'hint', text: '振替の種類は、これから作るクラスの初期値です。今あるクラスの振替の種類は変わりません' }));
-    view.appendChild(list);
+    ui.page(view, { title: 'コース', desc: '振替の種類は、これから作るクラスの初期値です。今あるクラスの振替の種類は変わりません',
+      actions: [h('button', { class: 'btn primary', type: 'button', text: '＋ コースを足す', on: { click: function () { edit(null, [], again); } } })] });
+    ui.card(view, [list]);
     ui.read('course.list', {}).then(function (d) {
       ui.clear(list); list.className = '';
       if (!d) { list.textContent = '読み込めませんでした'; return; }

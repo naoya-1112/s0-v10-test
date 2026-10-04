@@ -336,6 +336,55 @@
     return h('button', { class: 'btn np', type: 'button', text: '印刷', on: { click: function () { root.print(); } } });
   }
 
+  /* ---------- 画面の器（PR Hub 風・尚哉 10/4 2回目） ----------
+   * 画面は「グレーの背景の上の見出し（page）」＋「役割ごとの白いカード（card）」で組む。
+   * page: 大きい画面名＋灰色の短い説明（任意・印刷に出さない）＋右端の主な操作ボタン（任意・印刷に出さない）。
+   * card: 白い角丸の面。絞り込み・一覧・フォームの節ごとに1枚。
+   * sections: 並べた中身を「見出し（h2）ごと」「見出しの無いひとかたまりごと」のカードに入れ直す（中身・操作・文言は変えない）。
+   */
+  /** o: {title(文字か要素の配列), desc?, actions?[要素], np?(見出しごと印刷に出さない)}。view の末尾に足して返す */
+  function page(view, o) {
+    o = o || {};
+    var acts = (o.actions || []).filter(Boolean);
+    var head = h('div', { class: 'page-head' + (o.np ? ' np' : '') }, [
+      h('div', { class: 'page-title' }, [h('h1', {}, o.title), o.desc ? h('p', { class: 'page-desc np', text: o.desc }) : null]),
+      acts.length ? h('div', { class: 'page-actions np' }, acts) : null]);
+    if (view) view.appendChild(head);
+    return head;
+  }
+  /** 白いカード。o: {cls?}。parent があれば末尾に足す */
+  function card(parent, children, o) {
+    o = o || {};
+    var c = h('section', { class: 'card sec' + (o.cls ? ' ' + o.cls : '') }, children);
+    if (parent) parent.appendChild(c);
+    return c;
+  }
+  /** カードの上の小さな件数（「1 人」など） */
+  function cardCount(parent, text) {
+    var p = h('p', { class: 'card-count', text: text || '' });
+    if (parent) parent.appendChild(p);
+    return p;
+  }
+  function hasCls(n, c) { return (' ' + ((n && n.className) || '') + ' ').indexOf(' ' + c + ' ') >= 0; }
+  /**
+   * box の子をカードに入れ直す。見出し（page-head）・カード・お知らせ（date-alert）・危険な操作（danger-zone）・
+   * 折りたたみ（admin-fold）・件数（card-count）・カードに入れない印（bare）はそのまま。h2（印刷の題 print-title 以外）で新しいカードを始める。
+   */
+  function sections(box) {
+    var nodes = [].slice.call(box.childNodes || box.children || []);
+    nodes.forEach(function (n) { box.removeChild(n); });
+    var cur = null;
+    nodes.forEach(function (n) {
+      if (['page-head', 'card', 'date-alert', 'danger-zone', 'admin-fold', 'card-count', 'bare'].some(function (c) { return hasCls(n, c); })) {
+        box.appendChild(n); cur = null; return;
+      }
+      if (n.tagName === 'H2' && !hasCls(n, 'print-title')) cur = null;
+      if (!cur) cur = card(box, []);
+      cur.appendChild(n);
+    });
+    return box;
+  }
+
   /** 日付・月を前後に動かす帯（.np） */
   function stepper(label, onPrev, onToday, onNext, todayLabel) {
     return h('div', { class: 'stepper np' }, [
@@ -514,5 +563,5 @@
 
   App.ui = { form: form, formModal: formModal, confirmThen: confirmThen, closing: closing, h: h, clear: clear, toast: toast, banner: banner, openModal: openModal, write: write, read: read, resendPending: resendPending, forgetUnsettled: forgetUnsettled, forgetCache: forgetCache, stage: stage,
     studentPicker: studentPicker, onForget: onForget, forgetScreens: forgetScreens,
-    printButton: printButton, stepper: stepper, busy: busy };
+    printButton: printButton, stepper: stepper, busy: busy, page: page, card: card, cardCount: cardCount, sections: sections };
 })(window);

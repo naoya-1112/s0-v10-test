@@ -10,17 +10,18 @@
   function render(view0) {
     if (!state.month) state.month = core.todayJst().slice(0, 7);
     var view = App.ui.stage(view0);   // 出し直しの間も今の画面を出したまま（尚哉 10/4①）
-    view.appendChild(h('h1', { class: 'np', text: '名簿・出欠簿' }));
+    App.ui.page(view, { title: '名簿・出欠簿', np: true });
     view.appendChild(App.ui.stepper(core.fmtMonth(state.month),
       function () { state.month = core.addMonths(state.month, -1); render(view0); },
       function () { state.month = core.todayJst().slice(0, 7); render(view0); },
       function () { state.month = core.addMonths(state.month, 1); render(view0); }, '今月'));
     view.appendChild(h('div', { class: 'toolbar np' }, [App.ui.printButton(),
       h('span', { class: 'hint', text: '「出席（連絡あり）」は欠席連絡があったのに来た人です' })]));
-    var body = h('div', { class: 'loading', text: '読み込み中…' });
+    var body = h('div', { class: 'loading card sec', text: '読み込み中…' });
     view.appendChild(body);
+    App.ui.sections(view);
     App.ui.read('roster.month', { month: state.month }).then(function (d) {
-      App.ui.clear(body); body.className = 'print-area';
+      App.ui.clear(body); body.className = 'print-area card sec';
       if (!d) { body.textContent = '読み込めませんでした'; return; }
       var rv = V.rosterMonthView(d);
       body.appendChild(h('h2', { class: 'print-title', text: rv.title }));

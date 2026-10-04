@@ -10,19 +10,20 @@
 
   function render(view0) {
     var view = App.ui.stage(view0);   // 読み込みの間も今の画面を出したまま（尚哉 10/4①）
-    view.appendChild(h('h1', { text: '変更履歴（見るだけ）' }));
+    App.ui.page(view, { title: '変更履歴（見るだけ）' });
     var date = h('input', { type: 'date', class: 'input', value: state.date, 'aria-label': '日付' });
     var stu = h('select', { class: 'input', 'aria-label': '生徒' }, [h('option', { value: '', text: 'すべての生徒' })]);
     var tbl = h('select', { class: 'input', 'aria-label': '表' }, [h('option', { value: '', text: 'すべての表' })]
       .concat(TABLES.map(function (t) { return h('option', { value: t, text: t }); })));
     tbl.value = state.table;
     var go = h('button', { class: 'btn primary', type: 'button', text: '表示する' });
-    var list = h('div', {});
+    var list = h('div', { class: 'card sec' });
     view.appendChild(h('div', { class: 'toolbar np' }, [
       h('label', { class: 'field inline' }, [h('span', { text: '日付' }), date]),
       h('label', { class: 'field inline' }, [h('span', { text: '生徒' }), stu]),
       h('label', { class: 'field inline' }, [h('span', { text: '表' }), tbl]), go]));
     view.appendChild(list);
+    App.ui.sections(view);
     go.addEventListener('click', function () { state.date = date.value; state.studentId = stu.value; state.table = tbl.value; load(list, stu, false); });
     load(list, stu, true);
   }

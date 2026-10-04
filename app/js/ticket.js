@@ -15,13 +15,13 @@
     var f = App.takeFocus ? App.takeFocus() : '';
     if (f) state.studentId = f;
     var view = ui.stage(view0);   // 出し直しの間も今の画面を出したまま（尚哉 10/4①）
-    view.appendChild(h('h1', { text: '振替券の台帳' }));
-    view.appendChild(h('p', { class: 'sub', text: '期限は振替Dayの日程から毎回計算します。基準の振替Dayがまだ登録されていない券は「期限未確定」です。振替Dayを休み（中止）にしても、券は増えません' }));
-    var out = h('div', {});
+    ui.page(view, { title: '振替券の台帳', desc: '期限は振替Dayの日程から毎回計算します。基準の振替Dayがまだ登録されていない券は「期限未確定」です。振替Dayを休み（中止）にしても、券は増えません' });
+    var out = h('div', { class: 'card sec' });
     // 生徒は名前・ふりがなで探して選ぶ（生徒の画面と同じ探し方・U-22）
     var pick = ui.studentPicker({ value: state.studentId, onChange: function (id) { state.studentId = id; load(view0, out); } });
     view.appendChild(h('div', { class: 'toolbar np' }, [pick.el, ui.printButton()]));
     view.appendChild(out);
+    ui.sections(view);
     // 生徒を選んだ状態なら、券の一覧も同時に読み始める（U-21: 順番に待たない）
     var early = state.studentId ? fetchTickets(state.studentId) : null;
     Promise.all([ui.read('student.list', {}), ui.read('session.list', {}), ui.read('class.list', {})]).then(function (r) {
