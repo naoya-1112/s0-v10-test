@@ -108,7 +108,7 @@
           // 操作は日付のすぐ横（U-13）
           return h('tr', { class: r.status ? 'planned' : '' }, [h('td', { text: r.date + r.moved }),
             h('td', { class: 'np act-first' }, h('div', { class: 'row-actions' }, r.actions.map(function (a) { return actionBtn(a, r.raw, again); }))),
-            h('td', { text: r.time }), h('td', { text: r.name }),
+            h('td', { text: r.time }), h('td', {}, [r.name, r.teacher ? h('div', { class: 'sub', text: r.teacher }) : null]),
             h('td', { class: r.status ? 'c-abs' : '', text: r.status }), h('td', { class: r.calBad ? 'c-abs' : '', text: r.cal })]);
         }))])));
     });
@@ -202,7 +202,8 @@
         { key: 'endTime', label: '終了', type: 'time' },
         { key: 'number', label: '回番号（追加の授業）', type: 'number', show: function (v) { return v.kind === 'lesson'; } },
         { key: 'capacity', label: '定員（空ならクラス・教室の初期値）', type: 'number' },
-        { key: 'title', label: '題名（任意・例: 冬の振替Day）', show: function (v) { return v.kind !== 'lesson'; } }],
+        { key: 'title', label: '題名（任意・例: 冬の振替Day）', show: function (v) { return v.kind !== 'lesson'; } },
+        { key: 'teacher', label: 'この回の講師（任意・空ならクラスの講師）' }],
       check: function (v) { return A.addArgs(v); },
       onOk: function (args, b, m) { ui.write('session.add', args, { button: b, onDone: ui.closing(m, again) }); } });
   }
@@ -211,9 +212,10 @@
 
   function change(s, again) {
     ui.formModal({ title: '日程の変更: ' + sLabel(s), okLabel: '影響を確かめる',
-      intro: '同じ月の中の日付・時刻・定員だけ変えられます。別の月にするときは「中止」してから「追加の授業」を足してください',
+      intro: '同じ月の中の日付・時刻・定員と、この回の講師を変えられます。別の月にするときは「中止」してから「追加の授業」を足してください',
       fields: [{ key: 'date', label: '日付', type: 'date', value: s.date }, { key: 'startTime', label: '開始', type: 'time', value: s.start_time },
-        { key: 'endTime', label: '終了', type: 'time', value: s.end_time }, { key: 'capacity', label: '定員', type: 'number', value: s.capacity }],
+        { key: 'endTime', label: '終了', type: 'time', value: s.end_time }, { key: 'capacity', label: '定員', type: 'number', value: s.capacity },
+        { key: 'teacher', label: 'この回の講師（空ならクラスの講師）', value: s.teacher || '' }],
       check: function (v) { return A.changeArgs(s, v); },
       onOk: function (args, b, m) { ui.write('session.change', args, { button: b, title: '変更の影響', names: ref.names, onDone: ui.closing(m, afterContacts(again)) }); } });
   }

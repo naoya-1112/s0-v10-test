@@ -143,7 +143,7 @@
             return (+d[1]) + '/' + (+d[2]) + (s.number ? ' 第' + s.number + '回' : '') + (s.status === 'canceled' ? ' 中止' : '');
           }),
           rows: c.students.filter(function (p) { return !p.planned; }).map(function (p, i) {
-            return { no: i + 1, name: p.name, kana: p.kana,
+            return { no: i + 1, name: p.name, kana: p.kana, phone: p.phone || '',
               cells: c.sessions.map(function (s) { return s.status === 'canceled' ? { text: '—', cls: '' } : bookCell((c.cells[p.student_id] || {})[s.id]); }) };
           })
         };

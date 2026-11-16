@@ -175,7 +175,7 @@
   /** 1回ずつ追加（session.add）の args */
   function addArgs(f) {
     var o = { kind: s(f.kind) || 'lesson', classId: s(f.classId), date: s(f.date), startTime: s(f.startTime), endTime: s(f.endTime),
-      number: s(f.number), capacity: s(f.capacity), title: s(f.title) };
+      number: s(f.number), capacity: s(f.capacity), title: s(f.title), teacher: s(f.teacher) };
     if (!KIND[o.kind]) return { error: '種類を選んでください' };
     if (o.kind === 'lesson' && !o.classId) return { error: '授業はクラスを選んでください' };
     if (!isDate(o.date)) return { error: '日付を選んでください' };
@@ -196,6 +196,7 @@
       if (!/^[1-9]\d{0,2}$/.test(s(f.capacity))) return { error: '定員は数で入れてください' };
       o.capacity = s(f.capacity);
     }
+    if (f.teacher !== undefined && s(f.teacher) !== s(cur.teacher)) o.teacher = s(f.teacher);   // 空に戻すとクラスの講師
     if (Object.keys(o).length === 1) return { error: '変わった所がありません' };
     return { args: o };
   }
@@ -209,7 +210,7 @@
       var name = x.kind === 'lesson' ? (c ? c.label : '') + (x.number ? ' 第' + x.number + '回' : '') + (x.extra === '1' ? '（追加）' : '')
         : (KIND[x.kind] || x.kind) + (x.title ? ' ' + x.title : '') + (c ? '（' + c.label + '）' : '');
       return { id: x.id, date: core.fmtDate(x.date), time: (x.start_time || '') + '〜' + (x.end_time || ''), name: name,
-        status: canceled ? '中止' : '', moved: x.original_date ? '（もとは ' + core.fmtDate(x.original_date) + '）' : '',
+        teacher: x.teacher ? '講師 ' + x.teacher : '', status: canceled ? '中止' : '', moved: x.original_date ? '（もとは ' + core.fmtDate(x.original_date) + '）' : '',
         cal: CAL[x.cal_state] || '', calBad: x.cal_state === 'failed',
         actions: past ? [] : canceled ? ['uncancel'] : ['change', 'cancel'].concat(x.kind === 'lesson' ? ['renumber'] : []),   // 終わった回は操作を出さない（U-12）
         past: past, raw: x };

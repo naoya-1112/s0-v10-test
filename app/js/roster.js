@@ -31,10 +31,11 @@
           h('h3', { text: c.title }),
           h('p', { class: 'sub', text: '在籍 ' + c.count + '人' + (c.teacher ? '　講師: ' + c.teacher : '') }),
           h('div', { class: 'scroll-x' }, h('table', { class: 'grid book' }, [
-            h('thead', {}, h('tr', {}, [h('th', { text: 'No' }), h('th', { text: 'なまえ' })].concat(c.heads.map(function (t) { return h('th', { text: t }); })))),
+            h('thead', {}, h('tr', {}, [h('th', { text: 'No' }), h('th', { text: 'なまえ' }), h('th', { text: 'でんわ' })].concat(c.heads.map(function (t) { return h('th', { text: t }); })))),
             h('tbody', {}, c.rows.map(function (r) {
               return h('tr', {}, [h('td', { text: r.no }),
-                h('td', { class: 'name' }, [r.name, h('div', { class: 'kana', text: r.kana })])]
+                h('td', { class: 'name' }, [r.name, h('div', { class: 'kana', text: r.kana })]),
+                h('td', { class: 'phone', text: r.phone })]   // 出欠簿は名前と電話だけ（住所は出さない・10/4 Zoom）
                 .concat(r.cells.map(function (x) { return h('td', { class: 'mark ' + x.cls, text: x.text }); })));
             }))
           ])),
